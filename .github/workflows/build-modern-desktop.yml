@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "desktop-next/**"
       - "desktop/**"
       - ".github/workflows/build-modern-desktop.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   macos-arm64:
@@ -66,10 +67,11 @@ jobs:
           test -n "$DMG"
           test $(stat -f%z "$DMG") -gt 50000000
           hdiutil verify "$DMG"
+          cp "$DMG" Universe-FinancialRank-macOS-AppleSilicon.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: Universe-FinancialRank-macOS-AppleSilicon-unsigned
-          path: desktop-next/release/*.dmg
+          path: Universe-FinancialRank-macOS-AppleSilicon.dmg
           if-no-files-found: error
           retention-days: 14
 
@@ -116,9 +118,41 @@ jobs:
         run: |
           $artifact = Get-ChildItem desktop-next/release/*.exe | Select-Object -First 1
           if (-not $artifact -or $artifact.Length -lt 50000000) { throw "Portable EXE missing or unexpectedly small" }
+          Copy-Item $artifact.FullName Universe-FinancialRank-Windows-x64.exe
       - uses: actions/upload-artifact@v4
         with:
           name: Universe-FinancialRank-Windows-x64-unsigned
-          path: desktop-next/release/*.exe
+          path: Universe-FinancialRank-Windows-x64.exe
           if-no-files-found: error
           retention-days: 14
+
+  publish-release:
+    needs: [macos-arm64, windows-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Universe-FinancialRank-*-unsigned
+          path: release-assets
+          merge-multiple: true
+      - name: Verify release assets
+        run: |
+          test -s release-assets/Universe-FinancialRank-Windows-x64.exe
+          test -s release-assets/Universe-FinancialRank-macOS-AppleSilicon.dmg
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+            RELEASE_TITLE="Universe FinancialRank ${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="desktop-latest"
+            RELEASE_TITLE="Universe FinancialRank 最新桌面版"
+          fi
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release-assets/* --clobber --repo "${GITHUB_REPOSITORY}"
+            gh release edit "${RELEASE_TAG}" --title "${RELEASE_TITLE}" --latest --repo "${GITHUB_REPOSITORY}"
+          else
+            gh release create "${RELEASE_TAG}" release-assets/* --target "${GITHUB_SHA}" --title "${RELEASE_TITLE}" --generate-notes --latest --repo "${GITHUB_REPOSITORY}"
+          fi
