@@ -1,0 +1,73 @@
+name: Build modern desktop apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "desktop-next/**"
+      - "desktop/**"
+      - ".github/workflows/build-modern-desktop.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with:
+          {
+            node-version: "22",
+            cache: npm,
+            cache-dependency-path: desktop-next/package-lock.json,
+          }
+      - run: pip install pyinstaller
+      - name: Build local data engine
+        run: |
+          pyinstaller --noconfirm --clean --onefile --name rank-local-api --add-data "desktop/config:config" desktop/local_api.py
+          mkdir -p desktop-next/backend
+          cp dist/rank-local-api desktop-next/backend/
+      - run: npm ci
+        working-directory: desktop-next
+      - run: npm run dist:mac
+        working-directory: desktop-next
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Universe-FinancialRank-macOS-AppleSilicon-unsigned
+          path: desktop-next/release/*.dmg
+
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", architecture: x64 }
+      - uses: actions/setup-node@v4
+        with:
+          {
+            node-version: "22",
+            cache: npm,
+            cache-dependency-path: desktop-next/package-lock.json,
+          }
+      - run: pip install pyinstaller
+      - name: Build local data engine
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --name rank-local-api --add-data "desktop/config;config" desktop/local_api.py
+          New-Item -ItemType Directory -Force desktop-next/backend
+          Copy-Item dist/rank-local-api.exe desktop-next/backend/
+      - run: npm ci
+        working-directory: desktop-next
+      - run: npm run dist:win
+        working-directory: desktop-next
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Universe-FinancialRank-Windows-x64-unsigned
+          path: desktop-next/release/*.exe

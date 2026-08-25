@@ -22,7 +22,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
+        # Read-only loopback API: allow the packaged Electron file:// origin and
+        # local Vite preview to consume responses without weakening network scope.
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(data)
 
