@@ -22,3 +22,10 @@ test("ranking loader does not issue extra requests for one page", async () => {
   assert.equal(calls,1);
   assert.equal(result.items[0].symbol,"2330");
 });
+
+test("ranking loader rejects an unreasonable pagination response", async () => {
+  await assert.rejects(
+    fetchAllRankingPages(null, async () => ({ items: [], pagination: { pages: 1001 } })),
+    /分頁數異常/,
+  );
+});
