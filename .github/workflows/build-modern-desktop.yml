@@ -34,10 +34,14 @@ jobs:
           API_PID=$!
           for i in {1..30}; do curl --fail --silent http://127.0.0.1:8765/api/v1/health && break; sleep 1; done
           curl --fail --silent http://127.0.0.1:8765/api/v1/openapi.json | grep -q '3.0.3'
+          curl --fail --silent -X POST -H 'Content-Type: application/json' -d '{"action":"create"}' http://127.0.0.1:8765/api/v1/admin/backups | grep -q 'backup_id'
+          curl --fail --silent http://127.0.0.1:8765/api/v1/admin/backups | grep -q '"verified": true'
           kill $API_PID
           mkdir -p desktop-next/backend
           cp dist/rank-local-api desktop-next/backend/
       - run: npm ci
+        working-directory: desktop-next
+      - run: npm run test:unit
         working-directory: desktop-next
       - name: Create approved macOS icon
         run: |
@@ -93,10 +97,16 @@ jobs:
           if (-not $healthy) { Stop-Process -Id $process.Id -Force; throw "Packaged local API failed health check" }
           $openapi = Invoke-RestMethod http://127.0.0.1:8765/api/v1/openapi.json
           if ($openapi.openapi -ne "3.0.3") { throw "OpenAPI smoke check failed" }
+          $backup = Invoke-RestMethod -Method Post -ContentType "application/json" -Body '{"action":"create"}' http://127.0.0.1:8765/api/v1/admin/backups
+          if (-not $backup.backup_id) { throw "Packaged backup API failed" }
+          $backups = Invoke-RestMethod http://127.0.0.1:8765/api/v1/admin/backups
+          if (-not $backups[0].verified) { throw "Packaged backup verification failed" }
           Stop-Process -Id $process.Id -Force
           New-Item -ItemType Directory -Force desktop-next/backend
           Copy-Item dist/rank-local-api.exe desktop-next/backend/
       - run: npm ci
+        working-directory: desktop-next
+      - run: npm run test:unit
         working-directory: desktop-next
       - run: npm run dist:win
         working-directory: desktop-next

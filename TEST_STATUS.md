@@ -24,6 +24,9 @@
 | 排行狀態與匯出 | PASS | URL hash／本機模板程式完成 production compile；篩選結果 CSV 使用同一 rows 集合 |
 | 備份管理 API | PASS | 建立、清單、SHA-256、integrity_check、還原及還原前安全備份 |
 | 快速連續備份 | PASS | UTC 微秒識別碼，不重用檔名、不覆蓋既有備份 |
+| 完整排行榜分頁聚合 | PASS | Node 測試合併 3 頁 450 筆並保留 URL encoded snapshot_id |
+| Electron CORS preflight | PASS | OPTIONS 204，允許 JSON POST 的 Content-Type 與 POST method |
+| 快照請求競態 | PASS | 只允許最後一次 load request 更新 React backend state |
 | Bronze→Silver | PASS | 公司主檔、普通股候選與月營收 YoY 轉換 |
 | 財務轉換 | PASS | Q4 單季化、缺季、FCF 符號、零庫存、零基期 |
 | 規則治理 | PASS | checksum、重複 rule_id／priority 阻擋 |

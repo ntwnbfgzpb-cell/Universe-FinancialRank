@@ -61,11 +61,14 @@
 | 現代版備份與還原 UI | VERIFIED | 設定視窗可建立、列出、驗證並還原本機資料庫 |
 | 還原安全機制 | VERIFIED | backup_id 路徑限制、RESTORE 確認、同步期間阻擋及還原前安全備份 |
 | 備份唯一性 | VERIFIED | UTC 微秒檔名；連續備份不重名測試通過 |
+| 完整市場母體載入 | VERIFIED | 自動讀取所有 200 筆 API 分頁；450 筆跨頁合併單元測試通過 |
+| FINAL 預設與快照保持 | VERIFIED | 初次優先 FINAL；自動刷新保持目前快照並防止舊請求覆蓋新選擇 |
+| Electron POST CORS | VERIFIED | OPTIONS 204、Content-Type、POST methods 測試，修復同步／備份等 JSON 操作 |
 
 ## 驗證紀錄
 
 - JavaScript 語法檢查：通過。
 - 本機 HTTP 啟動：通過。
 - Playwright：套件可用，但執行環境缺少 Chromium binary，無法完成桌機／手機截圖及概念稿像素比對，因此視覺項目維持 DONE，尚未標 VERIFIED。
-- Python：41 項自動測試通過。
+- Python：42 項自動測試通過；Node：2 項前端 API 分頁測試通過。
 - React/Vite production build：通過；所有新增分頁與品質頁籤均完成編譯驗證。

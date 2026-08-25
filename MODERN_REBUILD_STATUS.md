@@ -47,12 +47,19 @@
 - 備份逐份驗證 SHA-256 與 SQLite integrity_check；損壞備份禁止還原
 - 還原只允許程式管理目錄內的合法 backup_id，且必須明確確認；操作前自動建立安全備份
 - 備份檔名提升至微秒精度，連續建立或建立後立即還原不會覆寫既有備份
+- 修正排行榜只載入 API 前 200 檔：前端自動取得所有分頁並合併完整上市櫃母體
+- 修正初次啟動可能選到 PROVISIONAL：未指定快照時優先載入最新 FINAL
+- 修正 30 秒自動刷新覆蓋歷史快照選擇，並加入非同步請求競態保護
+- 修正 Electron file:// 對 JSON POST 的 CORS preflight，官方同步、建立快照、備份及還原可正常呼叫
+- 無快照時停用頂部完整快照 CSV，避免產生必然失敗的下載請求
+- GitHub Actions 新增前端全分頁單元測試及封裝後備份建立／驗證 smoke test
 - 桌面設定加入自動重新整理與減少宇宙動態，本機 API 啟動採快速重試
 
 ## 驗證結果
 
 - Vite production build：通過
-- Python 排名／快照／匯入／XBRL／來源 API／品質新鮮度／備份還原／最新財務事實測試：41/41 通過
+- Python 排名／快照／匯入／XBRL／來源 API／CORS／品質新鮮度／備份還原／最新財務事實測試：42/42 通過
+- Node 前端 API 分頁測試：2/2 通過
 - AI PNG 素材已由 Vite 寫入 production assets
 - 分頁／品質治理新增功能 Vite production build：通過
 

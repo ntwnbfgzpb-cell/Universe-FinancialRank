@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BarChart3,
@@ -66,16 +66,22 @@ function App() {
   const [page, setPageState] = useState(pageFromHash);
   const [selected, setSelected] = useState("2308");
   const [backend, setBackend] = useState({ connected: false, snapshots: [], snapshot: null, rows: [], error: "" });
+  const selectedSnapshotRef=useRef(null);
+  const loadRequestRef=useRef(0);
   const [watchlist, setWatchlist] = useState(() => JSON.parse(localStorage.getItem("financial-rank-watchlist") || "[]"));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const setPage=(next)=>{setPageState(next);if(location.hash.slice(1).split("?")[0]!==next)location.hash=next};
-  const load = async (snapshotId) => {
+  const load = async (snapshotId=selectedSnapshotRef.current) => {
+    const requestId=++loadRequestRef.current;
     try {
       const [, snapshots] = await Promise.all([endpoints.health(), endpoints.snapshots()]);
-      const snapshot = snapshots.find((item) => item.snapshot_id === snapshotId) || snapshots[0] || null;
+      const snapshot = snapshots.find((item) => item.snapshot_id === snapshotId) || snapshots.find((item)=>item.status==="FINAL") || snapshots[0] || null;
+      selectedSnapshotRef.current=snapshot?.snapshot_id||null;
       const payload = snapshot ? await endpoints.rankings(snapshot.snapshot_id) : { items: [] };
+      if(requestId!==loadRequestRef.current)return;
       setBackend({ connected: true, snapshots, snapshot, rows: payload.items || payload, error: "" });
     } catch (error) {
+      if(requestId!==loadRequestRef.current)return;
       setBackend({ connected: false, snapshots: [], snapshot: null, rows: [], error: error.message });
     }
   };
@@ -160,21 +166,21 @@ function Sidebar({ page, setPage, openSettings }) {
 function Topbar({ backend, onSnapshot }) {
   const snapshotText = backend.snapshot
     ? `${backend.snapshot.as_of_date} ${backend.snapshot.status}`
-    : "2026-08-24 FINAL";
+    : "尚無資料快照";
   return (
     <header className="topbar">
       <select className="snapshot" value={backend.snapshot?.snapshot_id || ""} onChange={(event) => onSnapshot(event.target.value)}>
         {backend.snapshots.length ? backend.snapshots.map((item) => <option key={item.snapshot_id} value={item.snapshot_id}>{item.as_of_date} {item.status} · {item.rule_version}</option>) : <option>{snapshotText}</option>}
       </select>
       <div className="topMeta">
-        資料日期：{backend.snapshot?.as_of_date || "展示資料"} <CircleHelp />
+        資料日期：{backend.snapshot?.as_of_date || "尚無正式資料"} <CircleHelp />
         <span className={backend.connected ? "synced" : "offline"}>
           {backend.connected ? <CheckCircle2 /> : <AlertTriangle />}
           {backend.connected
             ? "本機資料引擎已連線"
             : "展示模式｜等待本機資料引擎"}
         </span>
-        <a className="topAction" href={rankingCsvUrl(backend.snapshot?.snapshot_id)} download>
+        <a className={`topAction ${backend.snapshot?"":"disabled"}`} href={backend.snapshot?rankingCsvUrl(backend.snapshot.snapshot_id):undefined} onClick={(event)=>{if(!backend.snapshot)event.preventDefault()}} download>
           <Download />
           匯出資料
         </a>

@@ -7,10 +7,19 @@ export async function api(path, options) {
   return payload;
 }
 
+export async function fetchAllRankingPages(snapshotId, request=api) {
+  const suffix=snapshotId?`&snapshot_id=${encodeURIComponent(snapshotId)}`:"";
+  const first=await request(`/rankings?page=1&page_size=200${suffix}`);
+  const pages=first.pagination?.pages||1;
+  if(pages<=1)return first;
+  const rest=await Promise.all(Array.from({length:pages-1},(_,index)=>request(`/rankings?page=${index+2}&page_size=200${suffix}`)));
+  return {...first,items:[...(first.items||[]),...rest.flatMap((page)=>page.items||[])]};
+}
+
 export const endpoints = {
   health: () => api("/health"),
   snapshots: () => api("/snapshots"),
-  rankings: (snapshotId) => api(`/rankings?page=1&page_size=200${snapshotId ? `&snapshot_id=${snapshotId}` : ""}`),
+  rankings: (snapshotId) => fetchAllRankingPages(snapshotId),
   stock: (symbol, snapshotId) => api(`/stocks/${symbol}${snapshotId ? `?snapshot_id=${snapshotId}` : ""}`),
   metrics: (symbol, snapshotId) => api(`/stocks/${symbol}/metrics${snapshotId ? `?snapshot_id=${snapshotId}` : ""}`),
   financials: (symbol) => api(`/stocks/${symbol}/financials`),

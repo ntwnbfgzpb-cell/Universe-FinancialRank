@@ -10,6 +10,24 @@ from desktop.local_api import ApiHandler
 
 
 class ApiTests(unittest.TestCase):
+    def test_cors_preflight_allows_packaged_electron_json_posts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ApiHandler.repository_path = str(Path(directory) / "rank.db")
+            server = ThreadingHTTPServer(("127.0.0.1", 0), ApiHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                request = Request(f"http://127.0.0.1:{server.server_port}/api/v1/admin/sync",
+                                  method="OPTIONS", headers={"Origin":"null",
+                                  "Access-Control-Request-Method":"POST",
+                                  "Access-Control-Request-Headers":"content-type"})
+                with urlopen(request) as response:
+                    self.assertEqual(response.status, 204)
+                    self.assertIn("POST", response.headers["Access-Control-Allow-Methods"])
+                    self.assertEqual(response.headers["Access-Control-Allow-Headers"], "Content-Type")
+            finally:
+                server.shutdown(); server.server_close(); thread.join(timeout=2)
+
     def test_backup_api_creates_lists_and_restores_verified_database(self):
         with tempfile.TemporaryDirectory() as directory:
             ApiHandler.repository_path = str(Path(directory) / "rank.db")
