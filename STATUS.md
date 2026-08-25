@@ -4,7 +4,7 @@
 
 | 工作 | 狀態 | 證據／下一步 |
 |---|---|---|
-| 圖片素材與透明度 QA | VERIFIED | 10 組正式素材 |
+| 圖片素材與透明度 QA | VERIFIED | 14 組正式素材，含產業星座與 Rank 歷史空狀態 |
 | 排行榜、篩選、CSV | DONE | app/index.html、app/app.js |
 | 個股詳情與決策軌跡 | DONE | app/app.js |
 | 星系關聯圖 | DONE | Canvas 可視化骨架；待正式關聯資料 |
@@ -46,10 +46,14 @@
 | Galaxy／熱力圖互動 | VERIFIED | 真實排名節點、篩選、檢視、2D／3D 切換與低負載 Liquid Orb 視覺 |
 | 最新六項財務值 | VERIFIED | ranking API 以 window function 取得每公司最新財務事實 |
 | 桌面設定與啟動韌性 | VERIFIED | 本機設定、reduced motion、自動刷新與 API 快速重試 |
+| 跨模組分頁瀏覽 | VERIFIED | 排行榜、選股、產業、快照、Rank 歷史、血緣、來源與品質清單共用分頁控制 |
+| 品質治理五頁籤 | VERIFIED | 新鮮度、異常、工作、Taxonomy 與對帳皆可瀏覽；不再顯示虛構 QA 成績 |
+| AI 補充空狀態素材 | VERIFIED | 產業星座與 Rank 歷史軌道圖已生成、透明度檢查並接入程式 |
 
 ## 驗證紀錄
 
 - JavaScript 語法檢查：通過。
 - 本機 HTTP 啟動：通過。
 - Playwright：套件可用，但執行環境缺少 Chromium binary，無法完成桌機／手機截圖及概念稿像素比對，因此視覺項目維持 DONE，尚未標 VERIFIED。
-- Python：37 項自動測試通過。
+- Python：38 項自動測試通過。
+- React/Vite production build：通過；所有新增分頁與品質頁籤均完成編譯驗證。

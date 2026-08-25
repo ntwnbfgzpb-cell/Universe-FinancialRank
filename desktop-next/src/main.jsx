@@ -189,6 +189,15 @@ const Select = ({ label, children }) => (
     </button>
   </label>
 );
+function usePaged(items, initialSize = 20) {
+  const [page,setPage]=useState(1),[size,setSize]=useState(initialSize);
+  const pages=Math.max(1,Math.ceil(items.length/size)),current=Math.min(page,pages);
+  useEffect(()=>setPage(1),[items.length,size]);
+  return { visible:items.slice((current-1)*size,current*size),page:current,pages,size,setSize,setPage };
+}
+function Pager({ total, paging, label="筆" }) {
+  return <div className="pagination modulePager"><span>共 {total.toLocaleString()} {label}</span><div>每頁 <select value={paging.size} onChange={(e)=>paging.setSize(Number(e.target.value))}><option>10</option><option>20</option><option>50</option><option>100</option></select><button disabled={paging.page===1} onClick={()=>paging.setPage(1)}>首頁</button><button disabled={paging.page===1} onClick={()=>paging.setPage((p)=>Math.max(1,p-1))}>‹</button><span>第 {paging.page} / {paging.pages} 頁</span><button disabled={paging.page===paging.pages} onClick={()=>paging.setPage((p)=>Math.min(paging.pages,p+1))}>›</button><button disabled={paging.page===paging.pages} onClick={()=>paging.setPage(paging.pages)}>末頁</button></div></div>;
+}
 function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleWatch }) {
   const [filters, setFilters] = useState({ q:"", market:"全部", industry:"全部", grade:"全部", completeness:"全部", min:"", max:"" });
   const [sort, setSort] = useState({ column:0, direction:1 });
@@ -490,6 +499,7 @@ function StockResearch({ symbol, snapshot }) {
   const [historyRows, setHistoryRows] = useState([]);
   const [tab, setTab] = useState("overview");
   const [metricIndex, setMetricIndex] = useState(0);
+  const historyPaging=usePaged(historyRows,20), factsPaging=usePaged(facts,20);
   useEffect(() => {
     if (!symbol) return;
     Promise.all([endpoints.stock(symbol, snapshot?.snapshot_id), endpoints.metrics(symbol, snapshot?.snapshot_id), endpoints.financials(symbol), endpoints.history(symbol)])
@@ -554,8 +564,8 @@ function StockResearch({ symbol, snapshot }) {
         <DecisionTrace metric={metricRows[metricIndex]} metricName={metrics[metricIndex]} />
       </div><RawTable /></>}
       {tab === "trend" && <div className="dashboardGrid trendPanels"><Panel title="十二期財務趨勢"><ComboChart/></Panel><Panel title="六指標目前評分"><Radar values={metricRows.map((row)=>Number(row.score||0))}/><table className="cleanTable"><tbody>{metrics.map((name,index)=><tr><td>{name}</td><td>{metricRows[index]?.grade||"—"}</td><td>{metricRows[index]?.score||"—"}</td></tr>)}</tbody></table></Panel></div>}
-      {tab === "history" && <div className="moduleTable"><table><thead><tr><th>快照日期</th><th>狀態</th><th>規則版本</th><th>模型排名</th><th>市場排名</th><th>產業排名</th><th>綜合分數</th><th>百分位</th></tr></thead><tbody>{historyRows.map((row)=><tr><td>{row.as_of_date}</td><td>{row.status}</td><td>{row.rule_version}</td><td>{row.rank_model}</td><td>{row.rank_market}</td><td>{row.rank_industry}</td><td>{row.overall_score}</td><td>{row.model_percentile}%</td></tr>)}</tbody></table>{!historyRows.length&&<div className="tableEmpty">目前快照尚無可比較的歷史版本。</div>}</div>}
-      {tab === "lineage" && <><Lineage/><Panel title="原始財務事實與來源雜湊"><div className="raw lineageFacts"><table><thead><tr><th>指標</th><th>期間</th><th>數值</th><th>單位</th><th>來源</th><th>可得時間</th><th>SHA-256</th></tr></thead><tbody>{facts.map((fact)=><tr><td>{fact.metric_code}</td><td>{fact.period}</td><td>{fact.value_text}</td><td>{fact.unit}</td><td>{fact.provider}</td><td>{fact.available_at}</td><td><code>{fact.sha256?.slice(0,14)}…</code></td></tr>)}</tbody></table></div></Panel></>}
+      {tab === "history" && (historyRows.length?<div className="moduleTable"><table><thead><tr><th>快照日期</th><th>狀態</th><th>規則版本</th><th>模型排名</th><th>市場排名</th><th>產業排名</th><th>綜合分數</th><th>百分位</th></tr></thead><tbody>{historyPaging.visible.map((row)=><tr><td>{row.as_of_date}</td><td>{row.status}</td><td>{row.rule_version}</td><td>{row.rank_model}</td><td>{row.rank_market}</td><td>{row.rank_industry}</td><td>{row.overall_score}</td><td>{row.model_percentile}%</td></tr>)}</tbody></table><Pager total={historyRows.length} paging={historyPaging} label="筆紀錄"/></div>:<EmptyModule image="./assets/empty-rank-history-orbit.png" title="尚無可比較的 Rank 歷史" text="累積兩個以上快照後，這裡會顯示排名、分數與百分位變化。"/>)}
+      {tab === "lineage" && <><Lineage/>{facts.length?<Panel title="原始財務事實與來源雜湊"><div className="raw lineageFacts"><table><thead><tr><th>指標</th><th>期間</th><th>數值</th><th>單位</th><th>來源</th><th>可得時間</th><th>SHA-256</th></tr></thead><tbody>{factsPaging.visible.map((fact)=><tr><td>{fact.metric_code}</td><td>{fact.period}</td><td>{fact.value_text}</td><td>{fact.unit}</td><td>{fact.provider}</td><td>{fact.available_at}</td><td><code>{fact.sha256?.slice(0,14)}…</code></td></tr>)}</tbody></table></div><Pager total={facts.length} paging={factsPaging} label="筆事實"/></Panel>:<EmptyModule image="./assets/empty-lineage-incomplete.png" title="原始財務事實尚未齊備" text="目前可檢視計算流程；同步 XBRL／官方公開檔後將顯示來源雜湊。"/>}</>}
     </section>
   );
 }
@@ -697,6 +707,7 @@ function Quality() {
   const [syncMessage, setSyncMessage] = useState("");
   const [qualityData,setQualityData]=useState(null);
   const [qualityQuery,setQualityQuery]=useState("");
+  const [qualityTab,setQualityTab]=useState("issues"),[severityFilter,setSeverityFilter]=useState("全部"),[providerFilter,setProviderFilter]=useState("全部");
   useEffect(()=>{endpoints.quality().then(setQualityData).catch(()=>setQualityData(null))},[]);
   const startSync = async () => {
     try { const state = await endpoints.sync("PROVISIONAL"); setSyncMessage(state.message); }
@@ -762,8 +773,9 @@ function Quality() {
     issue.severity === "CRITICAL" ? "重大" : issue.severity === "WARNING" ? "中等" : "低",
     `${issue.symbol || "—"} ${issue.name || ""}`.trim(),issue.period || "—",issue.field,
     `${issue.code} ${issue.details || ""}`,issue.provider,issue.created_at,issue.resolved_at ? "已處理" : "未處理"
-  ]) : demoIssues).filter((row)=>!qualityQuery||row.join(" ").toLowerCase().includes(qualityQuery.toLowerCase()));
+  ]) : demoIssues).filter((row)=>(!qualityQuery||row.join(" ").toLowerCase().includes(qualityQuery.toLowerCase()))&&(severityFilter==="全部"||row[0]===severityFilter)&&(providerFilter==="全部"||row[5]===providerFilter));
   const summary=qualityData?.summary;
+  const issuePaging=usePaged(issues,20);
   return (
     <section className="page qualityPage">
       <div className="pageTitle">
@@ -817,21 +829,16 @@ function Quality() {
       <div className="qualityLayout">
         <div>
           <div className="tabs">
-            <button>資料新鮮度</button>
-            <button className="on">缺值與異常</button>
-            <button>工作紀錄</button>
-            <button>Taxonomy 映射</button>
-            <button>對帳</button>
+            {[['fresh','資料新鮮度'],['issues','缺值與異常'],['jobs','工作紀錄'],['taxonomy','Taxonomy 映射'],['reconcile','對帳']].map(([id,label])=><button className={qualityTab===id?"on":""} onClick={()=>setQualityTab(id)}>{label}</button>)}
           </div>
+          {qualityTab==="fresh"&&<QualityFreshness/>}
+          {qualityTab==="jobs"&&<QualityJobs jobs={summary?.jobs||[]}/>} 
+          {qualityTab==="taxonomy"&&<TaxonomyStatus/>}
+          {qualityTab==="reconcile"&&<ReconciliationStatus/>}
+          <div style={{display:qualityTab==="issues"?"block":"none"}}>
           <div className="miniFilters">
-            <button>
-              嚴重程度　全部
-              <ChevronDown />
-            </button>
-            <button>
-              資料來源　全部
-              <ChevronDown />
-            </button>
+            <select value={severityFilter} onChange={(e)=>setSeverityFilter(e.target.value)}><option>全部</option><option>重大</option><option>中等</option><option>低</option></select>
+            <select value={providerFilter} onChange={(e)=>setProviderFilter(e.target.value)}><option>全部</option>{[...new Set((qualityData?.issues||[]).map((issue)=>issue.provider))].filter(Boolean).map((provider)=><option>{provider}</option>)}</select>
             <button>
               模型／排名　全部
               <ChevronDown />
@@ -863,7 +870,7 @@ function Quality() {
                 </tr>
               </thead>
               <tbody>
-                {issues.map((x, i) => (
+                {issuePaging.visible.map((x, i) => (
                   <React.Fragment>
                     <tr className={i === 4 ? "expanded" : ""}>
                       {x.map((v, j) => (
@@ -906,21 +913,23 @@ function Quality() {
               </tbody>
             </table>
           </div>
+          <Pager total={issues.length} paging={issuePaging} label="件問題"/>
           <div className="qualityBottom">
             <Panel title="近期工作紀錄（最近 5 筆）">
-              <JobTable />
+              <JobTable jobs={(summary?.jobs||[]).slice(0,5)} />
             </Panel>
             <Panel title="對帳覆蓋率（官方來源 30 檔 QA）">
               <div className="coverage">
-                <div className="donut green">
-                  <b>93.33%</b>
-                  <small>整體覆蓋率</small>
+                <div className="donut pending">
+                  <b>待驗證</b>
+                  <small>30 檔官方 QA</small>
                 </div>
                 <p>
-                  ● 完全一致　28 檔<br />● 部分差異　2 檔<br />● 不一致　0 檔
+                  尚未匯入完整官方對帳樣本。<br />完成 30 檔 QA 後才計算一致率，避免以示意數字冒充正式結果。
                 </p>
               </div>
             </Panel>
+          </div>
           </div>
         </div>
         <QualityRail onSync={handleSync} />
@@ -928,29 +937,27 @@ function Quality() {
     </section>
   );
 }
-function JobTable() {
+function JobTable({jobs=[]}) {
   return (
     <table className="jobs">
       <tbody>
-        {[
-          "資料擷取與重算",
-          "資料擷取與重算",
-          "對帳作業",
-          "資料擷取",
-          "資料擷取",
-        ].map((x, i) => (
-          <tr>
-            <td>{x}</td>
-            <td>2024Q1 v1</td>
-            <td>{i ? "成功" : "進行中"}</td>
-            <td>{i ? "1,750" : "1,190 / 1,750"}</td>
-            <td>00:{12 + i * 3}:34</td>
+        {jobs.length ? jobs.map((job) => (
+          <tr key={`${job.provider}-${job.started_at}`}>
+            <td>{job.provider||"官方來源"}</td>
+            <td>{job.started_at||"—"}</td>
+            <td>{job.status||"—"}</td>
+            <td>{job.row_count??0} 筆</td>
+            <td>{job.error_text||"—"}</td>
           </tr>
-        ))}
+        )):<tr><td colSpan="5">尚無工作紀錄；執行官方資料同步後將自動顯示。</td></tr>}
       </tbody>
     </table>
   );
 }
+function QualityFreshness(){return <div className="qualitySubview"><h3>官方來源新鮮度</h3><div className="sourceStrip">{[["MOPS／XBRL","財務報表公開檔","依公開檔 available_at 判定"],["TWSE OpenAPI","上市公司與月營收","同步時保存 fetched_at"],["TPEx OpenAPI","上櫃公司與月營收","Swagger 發現與 403 降級"]].map(([name,scope,note])=><div><CheckCircle2/><b>{name}</b><span>{scope}<br/>{note}</span></div>)}</div><p className="subviewNote">新鮮度以來源實際擷取時間與資料可得日計算，不以程式開啟時間冒充更新時間。</p></div>}
+function QualityJobs({jobs}){const paging=usePaged(jobs,20);return jobs.length?<div className="moduleTable qualitySubview"><table><thead><tr><th>來源</th><th>開始時間</th><th>結束時間</th><th>狀態</th><th>筆數</th><th>重試</th><th>錯誤</th></tr></thead><tbody>{paging.visible.map((job)=><tr><td>{job.provider}</td><td>{job.started_at}</td><td>{job.ended_at||"—"}</td><td>{job.status}</td><td>{job.row_count}</td><td>{job.retry_count}</td><td>{job.error_text||"—"}</td></tr>)}</tbody></table><Pager total={jobs.length} paging={paging} label="筆工作"/></div>:<EmptyModule image="./assets/maintenance-data-source.png" title="目前沒有擷取工作紀錄" text="執行官方資料同步後，這裡會顯示每個來源的處理狀態與錯誤。"/>}
+function TaxonomyStatus(){return <div className="qualitySubview"><h3>Taxonomy 映射狀態</h3><div className="governanceGrid">{[["公司主檔","TWSE／TPEx","已自動正規化"],["月營收","REVENUE_YOY","已映射"],["損益表","營收／營業利益／淨利／EPS","依 XBRL tag 精確映射"],["資產負債表","存貨","支援期初期末平均"],["現金流量表","CFO／PPE／無形資產","Core FCF 公式"],["未識別標籤","unmapped report","保留待人工治理"]].map(([name,target,state])=><article><b>{name}</b><span>{target}</span><strong>{state}</strong></article>)}</div></div>}
+function ReconciliationStatus(){return <div className="qualitySubview"><h3>官方資料對帳</h3><div className="reconcileSummary"><div className="donut green"><b>待執行</b><small>30 檔 QA</small></div><div><p>對帳不使用預設成功率。需取得真實官方檔後，逐檔比較六指標輸入、計算結果及排名。</p><ul><li>完全一致：數值、期間與單位一致</li><li>部分差異：可解釋的四捨五入或期間口徑差異</li><li>不一致：阻擋 FINAL 發布並建立品質問題</li></ul></div></div></div>}
 function QualityRail({ onSync }) {
   const [publishStatus,setPublishStatus]=useState("FINAL");
   return (
@@ -1095,19 +1102,22 @@ function Dashboard({ backend, setPage }) {
 function Watchlist({ items, rows, remove, open }) {
   const source = rows.length ? rows.map(apiRowToDisplay) : stocks;
   const selectedRows = source.filter((row) => items.includes(row[3]));
+  const paging=usePaged(selectedRows,20);
   return <section className="page modulePage"><div className="pageTitle"><div><h1>選股清單</h1><p>收藏會保存在本機，不會上傳到外部服務。</p></div><span>{selectedRows.length} 檔</span></div>
-    {selectedRows.length ? <div className="moduleTable"><table><thead><tr><th>代號／名稱</th><th>市場</th><th>產業</th><th>模型排名</th><th>百分位</th><th>綜合分數</th><th>操作</th></tr></thead><tbody>{selectedRows.map((row) => <tr><td><b>{row[3]}</b>　{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[0]}</td><td>{row[2]}%</td><td>{row[7]}</td><td><button onClick={() => open(row[3])}><Eye />研究</button><button onClick={() => remove(row[3])}><Trash2 />移除</button></td></tr>)}</tbody></table></div> : <div className="emptyState"><img src="./assets/empty-watchlist-telescope.png"/><h2>尚未加入選股清單</h2><p>在排行榜點擊星號，即可建立自己的研究清單。</p></div>}
+    {selectedRows.length ? <div className="moduleTable"><table><thead><tr><th>代號／名稱</th><th>市場</th><th>產業</th><th>模型排名</th><th>百分位</th><th>綜合分數</th><th>操作</th></tr></thead><tbody>{paging.visible.map((row) => <tr><td><b>{row[3]}</b>　{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[0]}</td><td>{row[2]}%</td><td>{row[7]}</td><td><button onClick={() => open(row[3])}><Eye />研究</button><button onClick={() => remove(row[3])}><Trash2 />移除</button></td></tr>)}</tbody></table><Pager total={selectedRows.length} paging={paging} label="檔"/></div> : <div className="emptyState"><img src="./assets/empty-watchlist-telescope.png" alt="望遠鏡搜尋財務星系"/><h2>尚未加入選股清單</h2><p>在排行榜點擊星號，即可建立自己的研究清單。</p></div>}
   </section>;
 }
 
 function IndustryResearch({ rows }) {
   const source = rows.length ? rows : stocks.map((item) => ({ industry: item[6], overall_score: item[7], model_percentile: item[2], symbol: item[3], name: item[4] }));
   const groups = Object.values(source.reduce((acc, row) => { const key = row.industry || "未分類"; const group = acc[key] ||= { name: key, rows: [], total: 0 }; group.rows.push(row); group.total += Number(row.overall_score || 0); return acc; }, {})).map((group) => ({ ...group, average: group.total / group.rows.length })).sort((a,b) => b.average-a.average);
-  return <section className="page modulePage"><div className="pageTitle"><div><h1>產業研究</h1><p>以同一不可變快照比較產業群組，避免跨期資料混用。</p></div></div><div className="industryGrid">{groups.map((group, index) => <article><span>{String(index+1).padStart(2,"0")}</span><h3>{group.name}</h3><strong>{group.average.toFixed(2)}</strong><small>平均綜合分數 · {group.rows.length} 檔</small><div className="industryBar"><i style={{width:`${Math.min(100, group.average/4*100)}%`}} /></div><p>領先：{group.rows.sort((a,b)=>Number(b.overall_score)-Number(a.overall_score)).slice(0,3).map((row)=>`${row.symbol} ${row.name}`).join("、")}</p></article>)}</div></section>;
+  const paging=usePaged(groups,12);
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>產業研究</h1><p>以同一不可變快照比較產業群組，避免跨期資料混用。</p></div></div>{groups.length?<><div className="industryGrid">{paging.visible.map((group, index) => <article><span>{String((paging.page-1)*paging.size+index+1).padStart(2,"0")}</span><h3>{group.name}</h3><strong>{group.average.toFixed(2)}</strong><small>平均綜合分數 · {group.rows.length} 檔</small><div className="industryBar"><i style={{width:`${Math.min(100, group.average/4*100)}%`}} /></div><p>領先：{group.rows.sort((a,b)=>Number(b.overall_score)-Number(a.overall_score)).slice(0,3).map((row)=>`${row.symbol} ${row.name}`).join("、")}</p></article>)}</div><Pager total={groups.length} paging={paging} label="個產業"/></>:<EmptyModule image="./assets/empty-industry-constellation.png" title="目前沒有產業排名資料" text="請先同步官方公司主檔與財務資料，再建立排名快照。"/>}</section>;
 }
 
 function Snapshots({ backend, select }) {
-  return <section className="page modulePage"><div className="pageTitle"><div><h1>資料快照</h1><p>FINAL 快照不可變更；PROVISIONAL 可供同步後驗證。</p></div></div><div className="moduleTable"><table><thead><tr><th>資料日期</th><th>狀態</th><th>規則版本</th><th>建立時間</th><th>Checksum</th><th>操作</th></tr></thead><tbody>{backend.snapshots.map((item) => <tr className={item.snapshot_id === backend.snapshot?.snapshot_id ? "activeRow" : ""}><td>{item.as_of_date}</td><td><span className={`statusTag ${item.status.toLowerCase()}`}>{item.status}</span></td><td>{item.rule_version}</td><td>{item.created_at}</td><td><code>{item.checksum?.slice(0,16)}…</code></td><td><button onClick={() => select(item.snapshot_id)}>載入快照</button></td></tr>)}</tbody></table></div></section>;
+  const paging=usePaged(backend.snapshots,20);
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>資料快照</h1><p>FINAL 快照不可變更；PROVISIONAL 可供同步後驗證。</p></div></div>{backend.snapshots.length?<div className="moduleTable"><table><thead><tr><th>資料日期</th><th>狀態</th><th>規則版本</th><th>建立時間</th><th>Checksum</th><th>操作</th></tr></thead><tbody>{paging.visible.map((item) => <tr className={item.snapshot_id === backend.snapshot?.snapshot_id ? "activeRow" : ""}><td>{item.as_of_date}</td><td><span className={`statusTag ${item.status.toLowerCase()}`}>{item.status}</span></td><td>{item.rule_version}</td><td>{item.created_at}</td><td><code>{item.checksum?.slice(0,16)}…</code></td><td><button onClick={() => select(item.snapshot_id)}>載入快照</button></td></tr>)}</tbody></table><Pager total={backend.snapshots.length} paging={paging} label="個快照"/></div>:<EmptyModule image="./assets/empty-no-snapshot.png" title="尚未建立資料快照" text="請前往資料來源執行官方同步，完成後即可建立 PROVISIONAL 或 FINAL 快照。"/>}</section>;
 }
 
 function Rules() {
@@ -1120,6 +1130,7 @@ function Rules() {
 function Sources({ refresh }) {
   const [state, setState] = useState({ documents: [], jobs: [] });
   const [sync, setSync] = useState({ status: "IDLE", message: "" });
+  const documentPaging=usePaged(state.documents,10),jobPaging=usePaged(state.jobs,10);
   const loadSources = () => Promise.all([endpoints.sources(), endpoints.syncStatus()]).then(([sources, syncState]) => { setState(sources); setSync(syncState); }).catch(() => {});
   useEffect(() => { loadSources(); }, []);
   useEffect(() => { if (sync.status !== "RUNNING") return; const timer = setInterval(loadSources, 1800); return () => clearInterval(timer); }, [sync.status]);
@@ -1127,12 +1138,13 @@ function Sources({ refresh }) {
   return <section className="page modulePage"><div className="pageTitle"><div><h1>資料來源與自動更新</h1><p>只使用公開官方端點；原始檔、SHA-256、擷取時間與版本完整留存。</p></div><button className="sync" onClick={start} disabled={sync.status === "RUNNING"}><RefreshCw className={sync.status === "RUNNING" ? "spin" : ""}/>{sync.status === "RUNNING" ? "同步中" : "取得官方資料"}</button></div>
   <div className="sourceStrip">{[["TWSE OpenAPI","證交所公司與月營收"],["TPEx OpenAPI","櫃買中心 Swagger 公開資料"],["MOPS / XBRL","財報公開檔與血緣"]].map(([name,desc])=><div><Wifi/><b>{name}</b><span>{desc}</span></div>)}</div>
   <div className="syncPanel"><div><Gauge/><strong>{sync.status}</strong><span>{sync.message || "等待手動同步或每日排程"}</span></div><progress value={sync.progress || 0} max="100"/><button onClick={() => { loadSources(); refresh(); }}>重新整理畫面</button></div>
-  <div className="dashboardGrid"><Panel title="最近來源文件"><table className="cleanTable"><tbody>{state.documents.slice(0,8).map((doc)=><tr><td>{doc.provider}</td><td>{doc.source_key}</td><td>{doc.fetched_at}</td><td><code>{doc.sha256?.slice(0,8)}</code></td></tr>)}</tbody></table></Panel><Panel title="擷取工作紀錄"><table className="cleanTable"><tbody>{state.jobs.slice(0,8).map((job)=><tr><td>{job.provider}</td><td>{job.status}</td><td>{job.row_count} 筆</td><td>{job.started_at}</td></tr>)}</tbody></table></Panel></div></section>;
+  {state.documents.length||state.jobs.length?<div className="dashboardGrid"><Panel title="來源文件"><table className="cleanTable"><tbody>{documentPaging.visible.map((doc)=><tr><td>{doc.provider}</td><td>{doc.source_key}</td><td>{doc.fetched_at}</td><td><code>{doc.sha256?.slice(0,8)}</code></td></tr>)}</tbody></table><Pager total={state.documents.length} paging={documentPaging} label="份文件"/></Panel><Panel title="擷取工作紀錄"><table className="cleanTable"><tbody>{jobPaging.visible.map((job)=><tr><td>{job.provider}</td><td>{job.status}</td><td>{job.row_count} 筆</td><td>{job.started_at}</td></tr>)}</tbody></table><Pager total={state.jobs.length} paging={jobPaging} label="筆工作"/></Panel></div>:<EmptyModule image="./assets/maintenance-data-source.png" title="尚無官方資料擷取紀錄" text="按下「取得官方資料」後，原始文件、雜湊與工作紀錄會顯示在這裡。"/>}</section>;
 }
 
 function Help() {
   return <section className="page modulePage"><div className="pageTitle"><div><h1>使用教學</h1><p>從官方資料同步到個股決策追蹤的完整操作流程。</p></div></div><div className="helpFlow">{[["1","同步資料","前往資料來源，取得 TWSE／TPEx 公開資料並建立 PROVISIONAL 快照。"],["2","檢查品質","確認缺值、異常與來源新鮮度；FINAL 發布後不可變更。"],["3","篩選排名","依市場、產業、完整度、等級與綜合分數縮小範圍。"],["4","加入清單","點擊排行榜星號保存到本機選股清單。"],["5","研究個股","查看六指標、規則判定、原始期間值、歷史與資料血緣。"],["6","匯出留存","右上角匯出目前快照 CSV，便於複核或後續分析。"]].map(([n,title,text])=><article><b>{n}</b><div><h3>{title}</h3><p>{text}</p></div></article>)}</div><div className="helpNotice"><CircleHelp/><div><b>排名是研究工具，不是投資建議</b><p>星系關聯與熱力圖呈現相似性與分布，不代表因果關係或未來報酬。</p></div></div></section>;
 }
+function EmptyModule({image,title,text}){return <div className="emptyState moduleEmpty"><img src={image} alt=""/><h2>{title}</h2><p>{text}</p></div>}
 function SettingsDialog({ close, reload }) {
   const [motion,setMotion]=useState(()=>localStorage.getItem("financial-rank-motion")!=="off");
   const [autoRefresh,setAutoRefresh]=useState(()=>localStorage.getItem("financial-rank-auto-refresh")!=="off");

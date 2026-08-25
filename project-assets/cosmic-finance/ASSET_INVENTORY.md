@@ -17,6 +17,8 @@
 | maintenance-data-source.png | 官方來源同步暫停／維護 | 1448×1086 | 是 | 搭配重試時間、來源名稱與工作狀態 |
 | bg-dashboard-cosmic-observatory.png | 總覽儀表板主視覺 | 1672×941 | 否 | 左側保留資訊留白；六節點與星系僅為指標整合意象 |
 | empty-watchlist-telescope.png | 選股清單空狀態 | 1254×1254 | 是 | 搭配程式原生的加入收藏操作說明 |
+| empty-industry-constellation.png | 產業研究無資料空狀態 | 1254×1254 | 是 | 以多產業玻璃星球呈現分類關聯；不代表正式產業權重 |
+| empty-rank-history-orbit.png | 個股 Rank 歷史無資料空狀態 | 1254×1254 | 是 | 以空白時間節點與軌道呈現等待建立歷史快照 |
 
 ## 品質檢查
 
