@@ -57,15 +57,18 @@ const apiRowToDisplay = (row) => [
   row.financial_values?.revenue?.value || "—", row.financial_values?.operating_margin?.value || "—",
   row.financial_values?.net_profit?.value || "—", row.financial_values?.eps?.value || "—",
   row.financial_values?.inventory_turnover?.value || "—", row.financial_values?.free_cash_flow?.value || "—",
-  row.rank_status || "正常",
+  row.rank_status || "正常", row.model_code || "—",
+  `${row.valid_count ?? 0} / ${String(row.model_code||"").startsWith("TW4F") ? 4 : 6}`,
 ];
 
 function App() {
-  const [page, setPage] = useState("rank");
+  const pageFromHash=()=>{const id=location.hash.slice(1).split("?")[0];return nav.some(([key])=>key===id)?id:"rank"};
+  const [page, setPageState] = useState(pageFromHash);
   const [selected, setSelected] = useState("2308");
   const [backend, setBackend] = useState({ connected: false, snapshots: [], snapshot: null, rows: [], error: "" });
   const [watchlist, setWatchlist] = useState(() => JSON.parse(localStorage.getItem("financial-rank-watchlist") || "[]"));
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const setPage=(next)=>{setPageState(next);if(location.hash.slice(1).split("?")[0]!==next)location.hash=next};
   const load = async (snapshotId) => {
     try {
       const [, snapshots] = await Promise.all([endpoints.health(), endpoints.snapshots()]);
@@ -82,6 +85,7 @@ function App() {
     const timer=localStorage.getItem("financial-rank-auto-refresh")==="off" ? null : setInterval(()=>load(),30000);
     return ()=>{startupRetries.forEach(clearTimeout);if(timer)clearInterval(timer)};
   }, []);
+  useEffect(()=>{const onHash=()=>setPageState(pageFromHash());addEventListener("hashchange",onHash);if(!location.hash)history.replaceState(null,"","#rank");return()=>removeEventListener("hashchange",onHash)},[]);
   useEffect(() => { localStorage.setItem("financial-rank-watchlist", JSON.stringify(watchlist)); }, [watchlist]);
   const toggleWatch = (symbol) => setWatchlist((items) => items.includes(symbol) ? items.filter((item) => item !== symbol) : [...items, symbol]);
   return (
@@ -187,12 +191,27 @@ function usePaged(items, initialSize = 20) {
 function Pager({ total, paging, label="筆" }) {
   return <div className="pagination modulePager"><span>共 {total.toLocaleString()} {label}</span><div>每頁 <select value={paging.size} onChange={(e)=>paging.setSize(Number(e.target.value))}><option>10</option><option>20</option><option>50</option><option>100</option></select><button disabled={paging.page===1} onClick={()=>paging.setPage(1)}>首頁</button><button disabled={paging.page===1} onClick={()=>paging.setPage((p)=>Math.max(1,p-1))}>‹</button><span>第 {paging.page} / {paging.pages} 頁</span><button disabled={paging.page===paging.pages} onClick={()=>paging.setPage((p)=>Math.min(paging.pages,p+1))}>›</button><button disabled={paging.page===paging.pages} onClick={()=>paging.setPage(paging.pages)}>末頁</button></div></div>;
 }
+const defaultRankFilters={q:"",market:"全部",industry:"全部",grade:"全部",completeness:"全部",min:"",max:""};
+function readRankView(){
+  const fallback=JSON.parse(localStorage.getItem("financial-rank-view")||"null")||{};
+  if(!location.hash.startsWith("#rank?")) return {filters:{...defaultRankFilters,...fallback.filters},sort:fallback.sort||{column:0,direction:1},pageSize:fallback.pageSize||20,page:1};
+  const query=new URLSearchParams(location.hash.split("?")[1]);
+  return {filters:{...defaultRankFilters,q:query.get("q")||"",market:query.get("market")||"全部",industry:query.get("industry")||"全部",grade:query.get("grade")||"全部",completeness:query.get("complete")||"全部",min:query.get("min")||"",max:query.get("max")||""},sort:{column:Number(query.get("sort")||0),direction:Number(query.get("dir")||1)},pageSize:Number(query.get("size")||20),page:Number(query.get("page")||1)};
+}
+function exportRowsCsv(rows,headers){
+  const quote=(value)=>`"${String(value??"").replaceAll('"','""')}"`;
+  const csv="\ufeff"+[headers,...rows].map((row)=>row.map(quote).join(",")).join("\r\n");
+  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})),link=document.createElement("a");
+  link.href=url;link.download=`financial-rank-filtered-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);
+}
 function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleWatch }) {
-  const [filters, setFilters] = useState({ q:"", market:"全部", industry:"全部", grade:"全部", completeness:"全部", min:"", max:"" });
-  const [sort, setSort] = useState({ column:0, direction:1 });
-  const [pageNumber, setPageNumber] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const source = useMemo(()=>backend.rows.length ? backend.rows.map(apiRowToDisplay) : stocks,[backend.rows]);
+  const [initial]=useState(readRankView);
+  const [filters, setFilters] = useState(initial.filters);
+  const [sort, setSort] = useState(initial.sort);
+  const [pageNumber, setPageNumber] = useState(initial.page);
+  const [pageSize, setPageSize] = useState(initial.pageSize);
+  const [presets,setPresets]=useState(()=>JSON.parse(localStorage.getItem("financial-rank-presets")||"[]"));
+  const source = useMemo(()=>backend.rows.length ? backend.rows.map(apiRowToDisplay) : stocks.map((row)=>[...row,"TW6F_GENERAL","6 / 6"]),[backend.rows]);
   const industries = useMemo(()=>[...new Set(source.map((row)=>row[6]))].sort(),[source]);
   const setFilter = (key,value) => { setFilters((state)=>({...state,[key]:value}));setPageNumber(1); };
   const rows = useMemo(()=>source.filter((row)=>(
@@ -211,9 +230,16 @@ function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleW
   const visible=rows.slice((current-1)*pageSize,current*pageSize);
   const sortBy=(column)=>setSort((value)=>value.column===column?{column,direction:-value.direction}:{column,direction:1});
   const clear=()=>{setFilters({q:"",market:"全部",industry:"全部",grade:"全部",completeness:"全部",min:"",max:""});setPageNumber(1)};
-  const headers=["模型排名","同業排名","百分位","代號","名稱","市場","產業","綜合分數","完整度","營收(億)","營益率(%)","淨利(億)","EPS(元)","存貨週轉(次)","自由現金流(億)","狀態"];
+  const headers=["模型排名","同業排名","百分位","代號","名稱","市場","產業","綜合分數","完整度","營收(億)","營益率(%)","淨利(億)","EPS(元)","存貨週轉(次)","自由現金流(億)","狀態","模型","有效數"];
+  useEffect(()=>{
+    const params=new URLSearchParams();Object.entries({q:filters.q,market:filters.market,industry:filters.industry,grade:filters.grade,complete:filters.completeness,min:filters.min,max:filters.max}).forEach(([key,value])=>{if(value&&value!=="全部")params.set(key,value)});params.set("sort",sort.column);params.set("dir",sort.direction);params.set("size",pageSize);
+    params.set("page",current);history.replaceState(null,"",`#rank?${params}`);localStorage.setItem("financial-rank-view",JSON.stringify({filters,sort,pageSize}));
+  },[filters,sort,pageSize,current]);
+  const savePreset=()=>{const name=window.prompt("請輸入條件模板名稱");if(!name?.trim())return;const next=[...presets.filter((item)=>item.name!==name.trim()),{name:name.trim(),filters,sort,pageSize}];setPresets(next);localStorage.setItem("financial-rank-presets",JSON.stringify(next))};
+  const loadPreset=(name)=>{const preset=presets.find((item)=>item.name===name);if(!preset)return;setFilters({...defaultRankFilters,...preset.filters});setSort(preset.sort||{column:0,direction:1});setPageSize(preset.pageSize||20);setPageNumber(1)};
+  const deletePreset=()=>{const name=window.prompt("請輸入要刪除的條件模板名稱");if(!name)return;const next=presets.filter((item)=>item.name!==name);setPresets(next);localStorage.setItem("financial-rank-presets",JSON.stringify(next))};
   return <section className="page rankPage">
-    <div className="pageTitle"><h1>臺股基本面排行榜</h1><span className="filterSaved"><SlidersHorizontal/>篩選條件即時套用</span></div>
+    <div className="pageTitle"><h1>臺股基本面排行榜</h1><div className="rankCommands"><select defaultValue="" onChange={(e)=>loadPreset(e.target.value)}><option value="">載入條件模板</option>{presets.map((item)=><option value={item.name}>{item.name}</option>)}</select><button onClick={savePreset}>儲存條件</button>{presets.length>0&&<button onClick={deletePreset}>刪除模板</button>}<button className="primary" onClick={()=>exportRowsCsv(rows,headers)}><Download/>匯出篩選結果</button><span className="filterSaved"><SlidersHorizontal/>條件已同步網址</span></div></div>
     <div className="filterPanel realFilters">
       <label className="field searchField"><span>股號／名稱</span><div><input value={filters.q} onChange={(e)=>setFilter("q",e.target.value)} placeholder="輸入股號或名稱"/><Search/></div></label>
       <label className="field"><span>市場</span><div className="segments">{["全部","上市","上櫃"].map((value)=><button className={filters.market===value?"on":""} onClick={()=>setFilter("market",value)}>{value}</button>)}</div></label>
@@ -226,29 +252,25 @@ function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleW
     <div className="rankWorkspace"><div className="tablePanel"><table><thead><tr><th></th>{headers.map((label,index)=><th><button className="sortButton" onClick={()=>index<8&&sortBy(index)}>{label}{index<8&&sort.column===index?(sort.direction>0?" ↑":" ↓"):""}</button></th>)}</tr></thead><tbody>{visible.map((row)=><tr className={selected===row[3]?"selected":""} onClick={()=>setSelected(row[3])} onDoubleClick={openStock}><td onClick={(event)=>{event.stopPropagation();toggleWatch(row[3])}}><Star className={watchlist.includes(row[3])?"starred":""}/></td>{row.map((value,index)=><td className={(index===3?"ticker ":"")+(index===8?gradeClass(value):"")+(String(value).startsWith("-")?" negative":"")}>{index===8?<span>{value}</span>:value}</td>)}</tr>)}</tbody></table>
       {!visible.length&&<div className="tableEmpty">沒有符合條件的公司，請調整篩選條件。</div>}
       <div className="pagination"><span>符合條件檔數：{rows.length.toLocaleString()} 檔</span><div>每頁顯示 <select value={pageSize} onChange={(e)=>{setPageSize(Number(e.target.value));setPageNumber(1)}}><option>20</option><option>50</option><option>100</option></select><button disabled={current===1} onClick={()=>setPageNumber((p)=>Math.max(1,p-1))}>‹</button>{Array.from({length:Math.min(5,pages)},(_,i)=>Math.min(pages,Math.max(1,current-2)+i)).filter((v,i,a)=>a.indexOf(v)===i).map((value)=><button className={value===current?"current":""} onClick={()=>setPageNumber(value)}>{value}</button>)}<span>{current} / {pages}</span><button disabled={current===pages} onClick={()=>setPageNumber((p)=>Math.min(pages,p+1))}>›</button></div></div>
-    </div><RankInsights selected={source.find((row)=>row[3]===selected)||source[0]}/></div>
+    </div><RankInsights selected={source.find((row)=>row[3]===selected)||source[0]} rows={source}/></div>
   </section>;
 }
-function RankInsights({ selected }) {
+function RankInsights({ selected,rows }) {
+  const industries=Object.entries(rows.reduce((acc,row)=>{acc[row[6]]=(acc[row[6]]||0)+1;return acc},{})).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const grades=Object.entries(rows.reduce((acc,row)=>{acc[row[8]]=(acc[row[8]]||0)+1;return acc},{})).sort((a,b)=>b[1]-a[1]);
   return (
     <aside className="insights">
       <Panel title="排名洞察">
         <b className="miniTitle">前 5 大產業分布</b>
-        {[
-          ["半導體", 39],
-          ["電子零組件", 22],
-          ["電機機械", 12],
-          ["金融保險", 11],
-          ["其他電子", 7],
-        ].map(([n, v]) => (
+        {industries.map(([n, count]) => {const v=rows.length?count/rows.length*100:0;return (
           <div className="barRow">
             <span>{n}</span>
             <i>
-              <em style={{ width: v * 2 + "%" }} />
+              <em style={{ width: Math.min(100,v * 2) + "%" }} />
             </i>
-            <b>{v}%</b>
+            <b>{v.toFixed(1)}%</b>
           </div>
-        ))}
+        )})}
       </Panel>
       <Panel title="所選個股六大指標雷達圖">
         <p>
@@ -259,32 +281,11 @@ function RankInsights({ selected }) {
       <Panel title="財務等級分布">
         <div className="donut">
           <div>
-            <b>1,825</b>
+            <b>{rows.length.toLocaleString()}</b>
             <small>總計</small>
           </div>
         </div>
-        <ul className="legend">
-          <li>
-            <i className="aa" />
-            AA　312
-          </li>
-          <li>
-            <i className="a" />
-            A　678
-          </li>
-          <li>
-            <i className="bb" />
-            BB　421
-          </li>
-          <li>
-            <i className="b" />
-            B　198
-          </li>
-          <li>
-            <i className="c" />
-            C　123
-          </li>
-        </ul>
+        <ul className="legend">{grades.map(([grade,count])=><li><i className={grade.toLowerCase().replace("/","")}/>{grade}　{count.toLocaleString()}</li>)}</ul>
       </Panel>
     </aside>
   );
@@ -870,7 +871,7 @@ function Dashboard({ backend, setPage }) {
 }
 
 function Watchlist({ items, rows, remove, open }) {
-  const source = rows.length ? rows.map(apiRowToDisplay) : stocks;
+  const source = rows.length ? rows.map(apiRowToDisplay) : stocks.map((row)=>[...row,"TW6F_GENERAL","6 / 6"]);
   const selectedRows = source.filter((row) => items.includes(row[3]));
   const paging=usePaged(selectedRows,20);
   return <section className="page modulePage"><div className="pageTitle"><div><h1>選股清單</h1><p>收藏會保存在本機，不會上傳到外部服務。</p></div><span>{selectedRows.length} 檔</span></div>

@@ -21,6 +21,7 @@
 | Electron 主程序語法 | PASS | node --check；健康等待、單一執行個體與安全導覽處理 |
 | 封裝後端 smoke | CI | macOS／Windows Actions 啟動 onefile API 並檢查 health 與 OpenAPI 3.0.3 |
 | 安裝檔完整性 | CI | Windows EXE 大小門檻；macOS DMG 大小門檻與 hdiutil verify |
+| 排行狀態與匯出 | PASS | URL hash／本機模板程式完成 production compile；篩選結果 CSV 使用同一 rows 集合 |
 | Bronze→Silver | PASS | 公司主檔、普通股候選與月營收 YoY 轉換 |
 | 財務轉換 | PASS | Q4 單季化、缺季、FCF 符號、零庫存、零基期 |
 | 規則治理 | PASS | checksum、重複 rule_id／priority 阻擋 |

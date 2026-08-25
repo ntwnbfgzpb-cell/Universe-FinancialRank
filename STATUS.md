@@ -54,6 +54,10 @@
 | Electron 啟動可靠性 | VERIFIED | 健康等待、單一執行個體、後端日誌、外部導覽限制與程序關閉處理 |
 | 現代版封裝 smoke test | DONE | Actions 封裝後啟動 API 驗證 health／OpenAPI，並驗證 EXE／DMG 產物 |
 | 舊版無作用 UI 清理 | VERIFIED | LegacyRanking、Coming 與未使用控制元件已移除；production build 通過 |
+| 排行狀態網址同步 | VERIFIED | 市場、產業、等級、完整度、分數、搜尋、排序、頁數及每頁筆數可由 hash 還原 |
+| 條件模板 | VERIFIED | 本機儲存、載入、覆寫與刪除，不上傳外部服務 |
+| 篩選結果 CSV | VERIFIED | 匯出全部符合條件資料，UTF-8 BOM，包含模型與有效指標數 |
+| 排名洞察動態化 | VERIFIED | 產業與財務等級分布由目前快照即時計算，不再使用固定示意數字 |
 
 ## 驗證紀錄
 
