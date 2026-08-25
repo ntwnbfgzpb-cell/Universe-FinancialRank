@@ -85,6 +85,17 @@ class ApiHandler(BaseHTTPRequestHandler):
                         return self._error("NO_FINAL_SNAPSHOT", "目前沒有 FINAL 快照", 404)
                     snapshot_id = latest["snapshot_id"]
                 rows = [dict(row) for row in repository.rankings(snapshot_id)]
+                latest_facts = repository.latest_facts_by_security()
+                for row in rows:
+                    facts = latest_facts.get(row["security_id"], {})
+                    row["financial_values"] = {
+                        "revenue": facts.get("REVENUE"),
+                        "operating_margin": facts.get("OP_MARGIN"),
+                        "net_profit": facts.get("NET_PROFIT"),
+                        "eps": facts.get("EPS"),
+                        "inventory_turnover": facts.get("INVENTORY_TURNOVER_Q"),
+                        "free_cash_flow": facts.get("FCF_CORE"),
+                    }
                 keyword = query.get("q", [""])[0].strip()
                 market = query.get("market", [""])[0]
                 industry = query.get("industry", [""])[0]

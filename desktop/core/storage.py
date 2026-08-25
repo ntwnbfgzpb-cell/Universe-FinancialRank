@@ -276,6 +276,22 @@ class LocalRepository:
                WHERE snapshot_id=? ORDER BY rank_model,s.symbol""", (snapshot_id,)
         ).fetchall()
 
+    def latest_facts_by_security(self):
+        rows = self.connection.execute(
+            """SELECT security_id,metric_code,value_text,unit,period FROM (
+                 SELECT security_id,metric_code,value_text,unit,period,
+                        ROW_NUMBER() OVER(PARTITION BY security_id,metric_code
+                                          ORDER BY period DESC,available_at DESC,fact_id DESC) AS rn
+                 FROM financial_facts
+               ) WHERE rn=1"""
+        ).fetchall()
+        result = {}
+        for row in rows:
+            result.setdefault(row["security_id"], {})[row["metric_code"]] = {
+                "value": row["value_text"], "unit": row["unit"], "period": row["period"]
+            }
+        return result
+
     def snapshots(self):
         return self.connection.execute(
             "SELECT * FROM ranking_snapshots ORDER BY created_at DESC"

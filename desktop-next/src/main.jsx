@@ -56,7 +56,10 @@ const apiRowToDisplay = (row) => [
   row.rank_model ?? "—", `${row.rank_industry ?? "—"} / —`, Number(row.model_percentile || 0).toFixed(1),
   row.symbol, row.name, row.market, row.industry, Number(row.overall_score || 0).toFixed(1),
   Number(row.overall_score || 0) >= 3.5 ? "AA" : Number(row.overall_score || 0) >= 3 ? "A" : Number(row.overall_score || 0) >= 2.5 ? "BB" : Number(row.overall_score || 0) >= 2 ? "B" : "C",
-  "—", "—", "—", "—", "—", "—", row.rank_status || "正常",
+  row.financial_values?.revenue?.value || "—", row.financial_values?.operating_margin?.value || "—",
+  row.financial_values?.net_profit?.value || "—", row.financial_values?.eps?.value || "—",
+  row.financial_values?.inventory_turnover?.value || "—", row.financial_values?.free_cash_flow?.value || "—",
+  row.rank_status || "正常",
 ];
 
 function App() {
@@ -64,6 +67,7 @@ function App() {
   const [selected, setSelected] = useState("2308");
   const [backend, setBackend] = useState({ connected: false, snapshots: [], snapshot: null, rows: [], error: "" });
   const [watchlist, setWatchlist] = useState(() => JSON.parse(localStorage.getItem("financial-rank-watchlist") || "[]"));
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const load = async (snapshotId) => {
     try {
       const [, snapshots] = await Promise.all([endpoints.health(), endpoints.snapshots()]);
@@ -74,12 +78,17 @@ function App() {
       setBackend({ connected: false, snapshots: [], snapshot: null, rows: [], error: error.message });
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const startupRetries=[800,1800,3500].map((delay)=>setTimeout(()=>load(),delay));
+    const timer=localStorage.getItem("financial-rank-auto-refresh")==="off" ? null : setInterval(()=>load(),30000);
+    return ()=>{startupRetries.forEach(clearTimeout);if(timer)clearInterval(timer)};
+  }, []);
   useEffect(() => { localStorage.setItem("financial-rank-watchlist", JSON.stringify(watchlist)); }, [watchlist]);
   const toggleWatch = (symbol) => setWatchlist((items) => items.includes(symbol) ? items.filter((item) => item !== symbol) : [...items, symbol]);
   return (
     <div className="appShell">
-      <Sidebar page={page} setPage={setPage} />
+      <Sidebar page={page} setPage={setPage} openSettings={()=>setSettingsOpen(true)} />
       <div className="appMain">
         <Topbar backend={backend} onSnapshot={load} />
         <main>
@@ -106,10 +115,11 @@ function App() {
           {page === "help" && <Help />}
         </main>
       </div>
+      {settingsOpen && <SettingsDialog close={()=>setSettingsOpen(false)} reload={()=>load(backend.snapshot?.snapshot_id)} />}
     </div>
   );
 }
-function Sidebar({ page, setPage }) {
+function Sidebar({ page, setPage, openSettings }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -138,7 +148,7 @@ function Sidebar({ page, setPage }) {
         <i />
         <i />
       </div>
-      <button className="settings">
+      <button className="settings" onClick={openSettings}>
         <Settings />
         設定
       </button>
@@ -180,6 +190,48 @@ const Select = ({ label, children }) => (
   </label>
 );
 function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleWatch }) {
+  const [filters, setFilters] = useState({ q:"", market:"全部", industry:"全部", grade:"全部", completeness:"全部", min:"", max:"" });
+  const [sort, setSort] = useState({ column:0, direction:1 });
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const source = useMemo(()=>backend.rows.length ? backend.rows.map(apiRowToDisplay) : stocks,[backend.rows]);
+  const industries = useMemo(()=>[...new Set(source.map((row)=>row[6]))].sort(),[source]);
+  const setFilter = (key,value) => { setFilters((state)=>({...state,[key]:value}));setPageNumber(1); };
+  const rows = useMemo(()=>source.filter((row)=>(
+    (filters.market === "全部" || row[5] === filters.market) &&
+    (filters.industry === "全部" || row[6] === filters.industry) &&
+    (filters.grade === "全部" || row[8] === filters.grade) &&
+    (filters.completeness === "全部" || (filters.completeness === "完整" ? row[15] !== "注意" : row[15] === "注意")) &&
+    (filters.min === "" || Number(row[7]) >= Number(filters.min)) &&
+    (filters.max === "" || Number(row[7]) <= Number(filters.max)) &&
+    (!filters.q || row[3].includes(filters.q.trim()) || row[4].includes(filters.q.trim()))
+  )).sort((a,b)=>{
+    const av=a[sort.column],bv=b[sort.column],numeric=!Number.isNaN(Number(av))&&!Number.isNaN(Number(bv));
+    return (numeric ? Number(av)-Number(bv) : String(av).localeCompare(String(bv),"zh-Hant"))*sort.direction;
+  }),[source,filters,sort]);
+  const pages=Math.max(1,Math.ceil(rows.length/pageSize)), current=Math.min(pageNumber,pages);
+  const visible=rows.slice((current-1)*pageSize,current*pageSize);
+  const sortBy=(column)=>setSort((value)=>value.column===column?{column,direction:-value.direction}:{column,direction:1});
+  const clear=()=>{setFilters({q:"",market:"全部",industry:"全部",grade:"全部",completeness:"全部",min:"",max:""});setPageNumber(1)};
+  const headers=["模型排名","同業排名","百分位","代號","名稱","市場","產業","綜合分數","完整度","營收(億)","營益率(%)","淨利(億)","EPS(元)","存貨週轉(次)","自由現金流(億)","狀態"];
+  return <section className="page rankPage">
+    <div className="pageTitle"><h1>臺股基本面排行榜</h1><span className="filterSaved"><SlidersHorizontal/>篩選條件即時套用</span></div>
+    <div className="filterPanel realFilters">
+      <label className="field searchField"><span>股號／名稱</span><div><input value={filters.q} onChange={(e)=>setFilter("q",e.target.value)} placeholder="輸入股號或名稱"/><Search/></div></label>
+      <label className="field"><span>市場</span><div className="segments">{["全部","上市","上櫃"].map((value)=><button className={filters.market===value?"on":""} onClick={()=>setFilter("market",value)}>{value}</button>)}</div></label>
+      <label className="field"><span>產業</span><select value={filters.industry} onChange={(e)=>setFilter("industry",e.target.value)}><option>全部</option>{industries.map((value)=><option>{value}</option>)}</select></label>
+      <label className="field"><span>綜合分數</span><div className="range"><input type="number" value={filters.min} onChange={(e)=>setFilter("min",e.target.value)} placeholder="最小"/><em>~</em><input type="number" value={filters.max} onChange={(e)=>setFilter("max",e.target.value)} placeholder="最大"/></div></label>
+      <label className="field"><span>完整度</span><select value={filters.completeness} onChange={(e)=>setFilter("completeness",e.target.value)}><option>全部</option><option>完整</option><option>有缺漏</option></select></label>
+      <label className="field"><span>財務等級</span><select value={filters.grade} onChange={(e)=>setFilter("grade",e.target.value)}>{["全部","AA","A","BB","B","C","N/A"].map((value)=><option>{value}</option>)}</select></label>
+      <div className="filterActions"><button onClick={clear}>清除</button><button className="primary" onClick={()=>setPageNumber(1)}>套用條件</button></div>
+    </div>
+    <div className="rankWorkspace"><div className="tablePanel"><table><thead><tr><th></th>{headers.map((label,index)=><th><button className="sortButton" onClick={()=>index<8&&sortBy(index)}>{label}{index<8&&sort.column===index?(sort.direction>0?" ↑":" ↓"):""}</button></th>)}</tr></thead><tbody>{visible.map((row)=><tr className={selected===row[3]?"selected":""} onClick={()=>setSelected(row[3])} onDoubleClick={openStock}><td onClick={(event)=>{event.stopPropagation();toggleWatch(row[3])}}><Star className={watchlist.includes(row[3])?"starred":""}/></td>{row.map((value,index)=><td className={(index===3?"ticker ":"")+(index===8?gradeClass(value):"")+(String(value).startsWith("-")?" negative":"")}>{index===8?<span>{value}</span>:value}</td>)}</tr>)}</tbody></table>
+      {!visible.length&&<div className="tableEmpty">沒有符合條件的公司，請調整篩選條件。</div>}
+      <div className="pagination"><span>符合條件檔數：{rows.length.toLocaleString()} 檔</span><div>每頁顯示 <select value={pageSize} onChange={(e)=>{setPageSize(Number(e.target.value));setPageNumber(1)}}><option>20</option><option>50</option><option>100</option></select><button disabled={current===1} onClick={()=>setPageNumber((p)=>Math.max(1,p-1))}>‹</button>{Array.from({length:Math.min(5,pages)},(_,i)=>Math.min(pages,Math.max(1,current-2)+i)).filter((v,i,a)=>a.indexOf(v)===i).map((value)=><button className={value===current?"current":""} onClick={()=>setPageNumber(value)}>{value}</button>)}<span>{current} / {pages}</span><button disabled={current===pages} onClick={()=>setPageNumber((p)=>Math.min(pages,p+1))}>›</button></div></div>
+    </div><RankInsights selected={source.find((row)=>row[3]===selected)||source[0]}/></div>
+  </section>;
+}
+function LegacyRanking({ selected, setSelected, openStock, backend, watchlist, toggleWatch }) {
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("全部");
   const rows = useMemo(
@@ -434,11 +486,15 @@ function Radar() {
 function StockResearch({ symbol, snapshot }) {
   const [record, setRecord] = useState(null);
   const [metricRows, setMetricRows] = useState([]);
+  const [facts, setFacts] = useState([]);
+  const [historyRows, setHistoryRows] = useState([]);
+  const [tab, setTab] = useState("overview");
+  const [metricIndex, setMetricIndex] = useState(0);
   useEffect(() => {
     if (!symbol) return;
-    Promise.all([endpoints.stock(symbol, snapshot?.snapshot_id), endpoints.metrics(symbol, snapshot?.snapshot_id)])
-      .then(([stock, rows]) => { setRecord(stock); setMetricRows(rows); })
-      .catch(() => { setRecord(null); setMetricRows([]); });
+    Promise.all([endpoints.stock(symbol, snapshot?.snapshot_id), endpoints.metrics(symbol, snapshot?.snapshot_id), endpoints.financials(symbol), endpoints.history(symbol)])
+      .then(([stock, rows, financials, history]) => { setRecord(stock); setMetricRows(rows); setFacts(financials); setHistoryRows(history); })
+      .catch(() => { setRecord(null); setMetricRows([]); setFacts([]); setHistoryRows([]); });
   }, [symbol, snapshot?.snapshot_id]);
   const fallback = stocks.find((item) => item[3] === symbol) || stocks[0];
   const stockName = record?.name || fallback[4];
@@ -474,7 +530,7 @@ function StockResearch({ symbol, snapshot }) {
       </div>
       <div className="metricStrip">
         {metrics.map((m, i) => (
-          <div className={i === 0 ? "active" : ""}>
+          <div className={i === metricIndex ? "active" : ""} onClick={()=>setMetricIndex(i)}>
             <span>{i + 1}</span>
             <b>{m}</b>
             <strong>
@@ -484,12 +540,9 @@ function StockResearch({ symbol, snapshot }) {
         ))}
       </div>
       <div className="tabs">
-        <button className="on">指標總覽</button>
-        <button>財務趨勢</button>
-        <button>Rank 歷史</button>
-        <button>資料血緣</button>
+        {[['overview','指標總覽'],['trend','財務趨勢'],['history','Rank 歷史'],['lineage','資料血緣']].map(([id,label])=><button className={tab===id?"on":""} onClick={()=>setTab(id)}>{label}</button>)}
       </div>
-      <div className="researchGrid">
+      {tab === "overview" && <><div className="researchGrid">
         <div className="charts">
           <Panel title="營收成長（年成長率 YoY）－近 12 個月">
             <ComboChart />
@@ -498,10 +551,11 @@ function StockResearch({ symbol, snapshot }) {
             <Bars values={[52, 55, 58, 62, 67, 73, 78, 82, 88, 94, 101, 110]} />
           </Panel>
         </div>
-        <DecisionTrace />
-      </div>
-      <RawTable />
-      <Lineage />
+        <DecisionTrace metric={metricRows[metricIndex]} metricName={metrics[metricIndex]} />
+      </div><RawTable /></>}
+      {tab === "trend" && <div className="dashboardGrid trendPanels"><Panel title="十二期財務趨勢"><ComboChart/></Panel><Panel title="六指標目前評分"><Radar values={metricRows.map((row)=>Number(row.score||0))}/><table className="cleanTable"><tbody>{metrics.map((name,index)=><tr><td>{name}</td><td>{metricRows[index]?.grade||"—"}</td><td>{metricRows[index]?.score||"—"}</td></tr>)}</tbody></table></Panel></div>}
+      {tab === "history" && <div className="moduleTable"><table><thead><tr><th>快照日期</th><th>狀態</th><th>規則版本</th><th>模型排名</th><th>市場排名</th><th>產業排名</th><th>綜合分數</th><th>百分位</th></tr></thead><tbody>{historyRows.map((row)=><tr><td>{row.as_of_date}</td><td>{row.status}</td><td>{row.rule_version}</td><td>{row.rank_model}</td><td>{row.rank_market}</td><td>{row.rank_industry}</td><td>{row.overall_score}</td><td>{row.model_percentile}%</td></tr>)}</tbody></table>{!historyRows.length&&<div className="tableEmpty">目前快照尚無可比較的歷史版本。</div>}</div>}
+      {tab === "lineage" && <><Lineage/><Panel title="原始財務事實與來源雜湊"><div className="raw lineageFacts"><table><thead><tr><th>指標</th><th>期間</th><th>數值</th><th>單位</th><th>來源</th><th>可得時間</th><th>SHA-256</th></tr></thead><tbody>{facts.map((fact)=><tr><td>{fact.metric_code}</td><td>{fact.period}</td><td>{fact.value_text}</td><td>{fact.unit}</td><td>{fact.provider}</td><td>{fact.available_at}</td><td><code>{fact.sha256?.slice(0,14)}…</code></td></tr>)}</tbody></table></div></Panel></>}
     </section>
   );
 }
@@ -552,16 +606,18 @@ function ComboChart() {
     </div>
   );
 }
-function DecisionTrace() {
+function DecisionTrace({ metric, metricName = "營收成長" }) {
+  let trace=[];
+  try { trace=typeof metric?.decision_trace_json === "string" ? JSON.parse(metric.decision_trace_json) : metric?.decision_trace_json || []; } catch { trace=[]; }
   return (
-    <Panel title="為何是這個等級：營收成長">
+    <Panel title={`為何是這個等級：${metricName}`}>
       <dl className="ruleSummary">
         <dt>套用規則</dt>
-        <dd>AA-REV-01</dd>
+        <dd>{metric?.rule_id || "AA-REV-01"}</dd>
         <dt>等級</dt>
-        <dd className="positive">AA（4 / 4）</dd>
+        <dd className="positive">{metric?.grade || "AA"}（{metric?.score || 4} / 4）</dd>
         <dt>一句話理由</dt>
-        <dd>近 12 個月營收年成長率 59.6%，高於門檻 40%。</dd>
+        <dd>{metric?.reason_text || "近 12 個月營收年成長率 59.6%，高於門檻 40%。"}</dd>
         <dt>計算公式</dt>
         <dd>近 12 個月合計營收 ÷ 前 12 個月合計營收 − 1</dd>
         <dt>品質檢核</dt>
@@ -569,12 +625,12 @@ function DecisionTrace() {
       </dl>
       <div className="trace">
         <h4>決策追蹤（規則評估過程）</h4>
-        {[
+        {(trace.length ? trace.map((step)=>[step.rule_id||step.id,step.description||step.reason||"規則條件判定",step.matched?"符合":"不適用"]) : [
           ["AA-REV-01", "營收成長率等級判定", "符合"],
           ["A-REV-01", "營收成長率等級判定", "不適用"],
           ["BBB-REV-01", "營收成長率等級判定", "不適用"],
           ["BB-REV-01", "營收成長率等級判定", "不適用"],
-        ].map((x, i) => (
+        ]).map((x, i) => (
           <div>
             <i />
             <b>{x[0]}</b>
@@ -639,11 +695,18 @@ function Lineage() {
 }
 function Quality() {
   const [syncMessage, setSyncMessage] = useState("");
+  const [qualityData,setQualityData]=useState(null);
+  const [qualityQuery,setQualityQuery]=useState("");
+  useEffect(()=>{endpoints.quality().then(setQualityData).catch(()=>setQualityData(null))},[]);
   const startSync = async () => {
     try { const state = await endpoints.sync("PROVISIONAL"); setSyncMessage(state.message); }
     catch (error) { setSyncMessage(error.message); }
   };
-  const issues = [
+  const handleSync = async (status) => {
+    try { const state=await endpoints.sync(status); setSyncMessage(state.message); }
+    catch(error) { setSyncMessage(error.message); }
+  };
+  const demoIssues = [
     [
       "重大",
       "2330 台積電",
@@ -695,6 +758,12 @@ function Quality() {
       "已處理",
     ],
   ];
+  const issues=(qualityData?.issues?.length ? qualityData.issues.map((issue)=>[
+    issue.severity === "CRITICAL" ? "重大" : issue.severity === "WARNING" ? "中等" : "低",
+    `${issue.symbol || "—"} ${issue.name || ""}`.trim(),issue.period || "—",issue.field,
+    `${issue.code} ${issue.details || ""}`,issue.provider,issue.created_at,issue.resolved_at ? "已處理" : "未處理"
+  ]) : demoIssues).filter((row)=>!qualityQuery||row.join(" ").toLowerCase().includes(qualityQuery.toLowerCase()));
+  const summary=qualityData?.summary;
   return (
     <section className="page qualityPage">
       <div className="pageTitle">
@@ -732,11 +801,11 @@ function Quality() {
           </p>
         </div>
         {[
-          ["宇宙總數", "1,750 檔", "上市 1,024 / 上櫃 726"],
-          ["可排名檔數", "1,612 檔", "92.11%"],
-          ["臨時 (PROVISIONAL)", "82 檔", "4.69%"],
+          ["宇宙總數", `${summary?.universe ?? 1750} 檔`, "目前快照公司母體"],
+          ["可排名檔數", `${summary?.ranked ?? 1612} 檔`, summary?.universe ? `${(summary.ranked/summary.universe*100).toFixed(2)}%` : "92.11%"],
+          ["臨時 (PROVISIONAL)", summary?.provisional ? "目前使用" : "非目前", "快照發布狀態"],
           ["資料過期 (>3日)", "17 檔", "0.97%"],
-          ["未解決重大問題", "6 件", "請儘速處理"],
+          ["未解決重大問題", `${summary?.critical ?? 6} 件`, "請儘速處理"],
         ].map((x, i) => (
           <div>
             <small>{x[0]}</small>
@@ -771,7 +840,7 @@ function Quality() {
               問題狀態　未解決
               <ChevronDown />
             </button>
-            <input placeholder="搜尋代碼／名稱／問題代碼" />
+            <input value={qualityQuery} onChange={(e)=>setQualityQuery(e.target.value)} placeholder="搜尋代碼／名稱／問題代碼" />
           </div>
           <div className="issueTable">
             <table>
@@ -854,7 +923,7 @@ function Quality() {
             </Panel>
           </div>
         </div>
-        <QualityRail />
+        <QualityRail onSync={handleSync} />
       </div>
     </section>
   );
@@ -882,7 +951,8 @@ function JobTable() {
     </table>
   );
 }
-function QualityRail() {
+function QualityRail({ onSync }) {
+  const [publishStatus,setPublishStatus]=useState("FINAL");
   return (
     <aside className="qualityRail">
       <Panel title="待處理佇列">
@@ -909,17 +979,17 @@ function QualityRail() {
           <dt>已處理</dt>
           <dd>1,190 / 1,750 檔</dd>
         </dl>
-        <button className="primary full">重試作業</button>
+        <button className="primary full" onClick={()=>onSync("PROVISIONAL")}>重試作業</button>
       </Panel>
       <Panel title="建立新快照">
         <p>① 選擇來源資料　② 設定與重算　③ 發布設定</p>
         <label>
-          <input type="radio" name="s" /> PROVISIONAL（臨時發布）
+          <input type="radio" name="s" checked={publishStatus==="PROVISIONAL"} onChange={()=>setPublishStatus("PROVISIONAL")}/> PROVISIONAL（臨時發布）
         </label>
         <label>
-          <input type="radio" name="s" defaultChecked /> FINAL（正式發布）
+          <input type="radio" name="s" checked={publishStatus==="FINAL"} onChange={()=>setPublishStatus("FINAL")}/> FINAL（正式發布）
         </label>
-        <button className="primary full">建立新快照</button>
+        <button className="primary full" onClick={()=>publishStatus!=="FINAL"||window.confirm("FINAL 快照建立後不可變更，確定繼續？")?onSync(publishStatus):null}>建立新快照</button>
         <div className="notice">
           <AlertTriangle />
           已發布之 FINAL 快照為不可變更。
@@ -928,7 +998,12 @@ function QualityRail() {
     </aside>
   );
 }
-function Galaxy() {
+function Galaxy({ rows }) {
+  const source=rows.length?rows:stocks.map((item)=>({symbol:item[3],name:item[4],industry:item[6],model_percentile:item[2],overall_score:item[7]}));
+  const [industry,setIndustry]=useState("全部"),[threshold,setThreshold]=useState(.35),[focus,setFocus]=useState(null);
+  const industries=[...new Set(source.map((row)=>row.industry))];
+  const visible=source.filter((row)=>industry==="全部"||row.industry===industry).slice(0,120);
+  const centers=new Map(industries.map((name,index)=>[name,{x:180+(index%4)*290,y:170+Math.floor(index/4)*250}]));
   return (
     <section className="page visualPage">
       <div className="pageTitle">
@@ -937,44 +1012,30 @@ function Galaxy() {
           <p>產業群聚、財務相似性與資料依存關係；關聯不代表因果。</p>
         </div>
         <div>
-          <button>
-            全部產業
-            <ChevronDown />
-          </button>
-          <button>
-            關聯門檻 0.35
-            <ChevronDown />
-          </button>
+          <select value={industry} onChange={(e)=>setIndustry(e.target.value)}><option>全部</option>{industries.map((name)=><option>{name}</option>)}</select>
+          <label className="threshold">關聯門檻 {threshold.toFixed(2)}<input type="range" min=".1" max=".8" step=".05" value={threshold} onChange={(e)=>setThreshold(Number(e.target.value))}/></label>
         </div>
       </div>
       <div className="galaxyCanvas">
+        <div className="liquidOrbBackdrop"><i/><b/></div>
         <svg viewBox="0 0 1200 700">
-          {Array.from({ length: 70 }, (_, i) => {
-            const a = i * 2.399,
-              r = 30 + (i % 18) * 19,
-              cx = i < 24 ? 280 : i < 48 ? 700 : 980,
-              cy = i < 24 ? 260 : i < 48 ? 400 : 210;
+          {visible.map((row,i) => {
+            const center=centers.get(row.industry)||{x:600,y:350},a=i*2.399,r=25+(i%14)*11;
             return (
               <circle
-                cx={cx + Math.cos(a) * r}
-                cy={cy + Math.sin(a) * r}
-                r={3 + (i % 7)}
+                cx={center.x + Math.cos(a) * r}
+                cy={center.y + Math.sin(a) * r}
+                r={4 + Number(row.model_percentile||70)/20}
                 className={"node n" + (i % 4)}
+                onClick={()=>setFocus(row)}
               />
             );
           })}
           <g className="clusterLabels">
-            <text x="190" y="80">
-              半導體星系
-            </text>
-            <text x="625" y="155">
-              電子零組件
-            </text>
-            <text x="900" y="70">
-              金融保險
-            </text>
+            {industries.slice(0,8).map((name)=><text x={(centers.get(name)?.x||600)-50} y={(centers.get(name)?.y||350)-105}>{name}</text>)}
           </g>
         </svg>
+        {focus&&<div className="nodeInspector"><button onClick={()=>setFocus(null)}>×</button><b>{focus.symbol} {focus.name}</b><span>{focus.industry}</span><strong>百分位 {Number(focus.model_percentile||0).toFixed(1)}</strong><small>綜合分數 {focus.overall_score}</small></div>}
         <div className="canvasLegend">
           節點大小：模型百分位　光環：完整度　連線：標準化關聯強度
         </div>
@@ -982,13 +1043,10 @@ function Galaxy() {
     </section>
   );
 }
-function Heatmap() {
-  const cells = Array.from({ length: 96 }, (_, i) => ({
-    x: i % 16,
-    y: Math.floor(i / 16),
-    h: 20 + ((i * 37) % 120),
-    v: 70 + ((i * 17) % 30),
-  }));
+function Heatmap({ rows }) {
+  const [flat,setFlat]=useState(false),[focus,setFocus]=useState(null);
+  const source=rows.length?rows:stocks.map((item)=>({symbol:item[3],name:item[4],industry:item[6],model_percentile:item[2],overall_score:item[7]}));
+  const cells=source.slice(0,160).map((row,i)=>({x:i%16,y:Math.floor(i/16),h:20+Number(row.model_percentile||0),v:Number(row.model_percentile||0),row}));
   return (
     <section className="page visualPage">
       <div className="pageTitle">
@@ -997,19 +1055,17 @@ function Heatmap() {
           <p>產業、綜合分數、模型百分位與完整度的立體分布。</p>
         </div>
         <div>
-          <button>
-            透視檢視
-            <ChevronDown />
-          </button>
-          <button>展平為 2D</button>
+          <button className={!flat?"activeView":""} onClick={()=>setFlat(false)}>透視檢視</button>
+          <button className={flat?"activeView":""} onClick={()=>setFlat(true)}>展平為 2D</button>
         </div>
       </div>
       <div className="heatCanvas">
-        <div className="heatScene">
+        <div className={flat?"heatScene flat":"heatScene"}>
           {cells.map((c) => (
             <i
               style={{ "--x": c.x, "--y": c.y, "--h": c.h, "--v": c.v }}
-              title={`百分位 ${c.v}`}
+              title={`${c.row.symbol} ${c.row.name}｜百分位 ${c.v}`}
+              onClick={()=>setFocus(c.row)}
             />
           ))}
         </div>
@@ -1018,6 +1074,7 @@ function Heatmap() {
         <div className="canvasLegend">
           Z：模型內百分位　顏色：財務等級　柱頂：資料完整度
         </div>
+        {focus&&<div className="heatInspector"><button onClick={()=>setFocus(null)}>×</button><b>{focus.symbol} {focus.name}</b><span>{focus.industry}</span><strong>{focus.overall_score} 分</strong><small>模型百分位 {Number(focus.model_percentile||0).toFixed(1)}</small></div>}
       </div>
     </section>
   );
@@ -1075,6 +1132,12 @@ function Sources({ refresh }) {
 
 function Help() {
   return <section className="page modulePage"><div className="pageTitle"><div><h1>使用教學</h1><p>從官方資料同步到個股決策追蹤的完整操作流程。</p></div></div><div className="helpFlow">{[["1","同步資料","前往資料來源，取得 TWSE／TPEx 公開資料並建立 PROVISIONAL 快照。"],["2","檢查品質","確認缺值、異常與來源新鮮度；FINAL 發布後不可變更。"],["3","篩選排名","依市場、產業、完整度、等級與綜合分數縮小範圍。"],["4","加入清單","點擊排行榜星號保存到本機選股清單。"],["5","研究個股","查看六指標、規則判定、原始期間值、歷史與資料血緣。"],["6","匯出留存","右上角匯出目前快照 CSV，便於複核或後續分析。"]].map(([n,title,text])=><article><b>{n}</b><div><h3>{title}</h3><p>{text}</p></div></article>)}</div><div className="helpNotice"><CircleHelp/><div><b>排名是研究工具，不是投資建議</b><p>星系關聯與熱力圖呈現相似性與分布，不代表因果關係或未來報酬。</p></div></div></section>;
+}
+function SettingsDialog({ close, reload }) {
+  const [motion,setMotion]=useState(()=>localStorage.getItem("financial-rank-motion")!=="off");
+  const [autoRefresh,setAutoRefresh]=useState(()=>localStorage.getItem("financial-rank-auto-refresh")!=="off");
+  const save=()=>{localStorage.setItem("financial-rank-motion",motion?"on":"off");localStorage.setItem("financial-rank-auto-refresh",autoRefresh?"on":"off");document.documentElement.classList.toggle("reducedMotion",!motion);reload();close()};
+  return <div className="modalBackdrop" onMouseDown={close}><section className="settingsDialog" onMouseDown={(event)=>event.stopPropagation()}><div className="dialogTitle"><div><h2>桌面程式設定</h2><p>設定只保存在這台電腦。</p></div><button onClick={close}>×</button></div><label className="settingRow"><div><b>自動重新整理</b><span>每 30 秒檢查本機 API 與最新快照</span></div><input type="checkbox" checked={autoRefresh} onChange={(e)=>setAutoRefresh(e.target.checked)}/></label><label className="settingRow"><div><b>宇宙視覺動態</b><span>啟用低速 Liquid Orb 光影；關閉後完全靜止</span></div><input type="checkbox" checked={motion} onChange={(e)=>setMotion(e.target.checked)}/></label><div className="engineInfo"><code>http://127.0.0.1:8765</code><span>僅限本機 loopback，不對外開放。</span></div><div className="dialogActions"><button onClick={close}>取消</button><button className="primary" onClick={save}>儲存設定</button></div></section></div>;
 }
 function Coming({ title }) {
   return (

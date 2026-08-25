@@ -41,6 +41,11 @@
 | 官方同步桌面串接 | VERIFIED | POST /api/v1/admin/sync 背景執行完整官方更新管線 |
 | 來源與擷取紀錄頁 | VERIFIED | source_documents、ingestion_jobs 與同步狀態 API 已串接 |
 | AI 總覽／空狀態素材 | VERIFIED | 2 組新素材已接入程式與素材清冊 |
+| 排行榜完整互動 | VERIFIED | 7 類篩選、8 欄排序、實際分頁與本機收藏 |
+| 個股研究完整串接 | VERIFIED | 摘要、六指標、財務事實、Rank 歷史與血緣 API |
+| Galaxy／熱力圖互動 | VERIFIED | 真實排名節點、篩選、檢視、2D／3D 切換與低負載 Liquid Orb 視覺 |
+| 最新六項財務值 | VERIFIED | ranking API 以 window function 取得每公司最新財務事實 |
+| 桌面設定與啟動韌性 | VERIFIED | 本機設定、reduced motion、自動刷新與 API 快速重試 |
 
 ## 驗證紀錄
 

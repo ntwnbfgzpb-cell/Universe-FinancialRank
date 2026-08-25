@@ -7,6 +7,27 @@ from desktop.core.storage import LocalRepository
 
 
 class StorageTests(unittest.TestCase):
+    def test_latest_facts_by_security_returns_newest_period(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = LocalRepository(Path(directory) / "rank.db")
+            security_id = repository.upsert_security("2330", "台積電", "上市", "半導體", "TW6F_GENERAL")
+            repository.connection.execute(
+                "INSERT INTO source_documents VALUES(?,?,?,?,?,?,?)",
+                ("source-1","MOPS","fixture","2026-01-01","2026-01-02","a"*64,"v1"),
+            )
+            for period,value in [("2025Q4","12.3"),("2026Q1","15.8")]:
+                repository.connection.execute(
+                    """INSERT INTO financial_facts
+                       (security_id,metric_code,period,value_text,published_at,available_at,statement_scope,unit,version,source_id)
+                       VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (security_id,"EPS",period,value,"2026-01-01","2026-01-02","CONSOLIDATED","TWD","v1","source-1"),
+                )
+            repository.connection.commit()
+            latest = repository.latest_facts_by_security()
+            self.assertEqual(latest[security_id]["EPS"]["value"], "15.8")
+            self.assertEqual(latest[security_id]["EPS"]["period"], "2026Q1")
+            repository.close()
+
     def test_snapshot_is_persisted_with_checksum(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = LocalRepository(Path(directory) / "rank.db")
