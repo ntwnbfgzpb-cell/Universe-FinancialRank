@@ -18,6 +18,9 @@
 | 動態資料品質 | PASS | 匯入結果可產生品質摘要與問題紀錄 |
 | 來源新鮮度摘要 | PASS | 無快照時仍依 source_documents 回傳供應者、最後擷取時間、文件數與過期狀態 |
 | React production build | PASS | Vite 1805 modules；品質頁、星系關聯與熱力圖控制完成編譯 |
+| Electron 主程序語法 | PASS | node --check；健康等待、單一執行個體與安全導覽處理 |
+| 封裝後端 smoke | CI | macOS／Windows Actions 啟動 onefile API 並檢查 health 與 OpenAPI 3.0.3 |
+| 安裝檔完整性 | CI | Windows EXE 大小門檻；macOS DMG 大小門檻與 hdiutil verify |
 | Bronze→Silver | PASS | 公司主檔、普通股候選與月營收 YoY 轉換 |
 | 財務轉換 | PASS | Q4 單季化、缺季、FCF 符號、零庫存、零基期 |
 | 規則治理 | PASS | checksum、重複 rule_id／priority 阻擋 |

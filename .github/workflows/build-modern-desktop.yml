@@ -30,6 +30,11 @@ jobs:
       - name: Build local data engine
         run: |
           pyinstaller --noconfirm --clean --onefile --name rank-local-api --add-data "desktop/config:config" desktop/local_api.py
+          dist/rank-local-api --db "$RUNNER_TEMP/rank-smoke.db" --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/backend.log" 2>&1 &
+          API_PID=$!
+          for i in {1..30}; do curl --fail --silent http://127.0.0.1:8765/api/v1/health && break; sleep 1; done
+          curl --fail --silent http://127.0.0.1:8765/api/v1/openapi.json | grep -q '3.0.3'
+          kill $API_PID
           mkdir -p desktop-next/backend
           cp dist/rank-local-api desktop-next/backend/
       - run: npm ci
@@ -51,10 +56,18 @@ jobs:
       - run: npm run dist:mac
         working-directory: desktop-next
         env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+      - name: Verify macOS package
+        run: |
+          DMG=$(find desktop-next/release -name '*.dmg' -print -quit)
+          test -n "$DMG"
+          test $(stat -f%z "$DMG") -gt 50000000
+          hdiutil verify "$DMG"
       - uses: actions/upload-artifact@v4
         with:
           name: Universe-FinancialRank-macOS-AppleSilicon-unsigned
           path: desktop-next/release/*.dmg
+          if-no-files-found: error
+          retention-days: 14
 
   windows-x64:
     runs-on: windows-latest
@@ -74,6 +87,13 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --name rank-local-api --add-data "desktop/config;config" desktop/local_api.py
+          $process = Start-Process -FilePath dist/rank-local-api.exe -ArgumentList "--db", "$env:RUNNER_TEMP\rank-smoke.db", "--host", "127.0.0.1", "--port", "8765" -PassThru -WindowStyle Hidden
+          $healthy = $false
+          for ($i=0; $i -lt 30; $i++) { try { $health = Invoke-RestMethod http://127.0.0.1:8765/api/v1/health; if ($health.status -eq "ok") { $healthy=$true; break } } catch {}; Start-Sleep -Seconds 1 }
+          if (-not $healthy) { Stop-Process -Id $process.Id -Force; throw "Packaged local API failed health check" }
+          $openapi = Invoke-RestMethod http://127.0.0.1:8765/api/v1/openapi.json
+          if ($openapi.openapi -ne "3.0.3") { throw "OpenAPI smoke check failed" }
+          Stop-Process -Id $process.Id -Force
           New-Item -ItemType Directory -Force desktop-next/backend
           Copy-Item dist/rank-local-api.exe desktop-next/backend/
       - run: npm ci
@@ -81,7 +101,14 @@ jobs:
       - run: npm run dist:win
         working-directory: desktop-next
         env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }
+      - name: Verify Windows package
+        shell: pwsh
+        run: |
+          $artifact = Get-ChildItem desktop-next/release/*.exe | Select-Object -First 1
+          if (-not $artifact -or $artifact.Length -lt 50000000) { throw "Portable EXE missing or unexpectedly small" }
       - uses: actions/upload-artifact@v4
         with:
           name: Universe-FinancialRank-Windows-x64-unsigned
           path: desktop-next/release/*.exe
+          if-no-files-found: error
+          retention-days: 14

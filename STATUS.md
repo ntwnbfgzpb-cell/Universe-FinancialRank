@@ -51,6 +51,9 @@
 | AI 補充空狀態素材 | VERIFIED | 產業星座與 Rank 歷史軌道圖已生成、透明度檢查並接入程式 |
 | 品質摘要真實化 | VERIFIED | 來源新鮮度、文件數、過期來源、問題統計及擷取工作全部讀取 SQLite |
 | 星系相似度連線 | VERIFIED | 不使用靜態示意線；由目前快照分數、百分位及產業關係即時計算 |
+| Electron 啟動可靠性 | VERIFIED | 健康等待、單一執行個體、後端日誌、外部導覽限制與程序關閉處理 |
+| 現代版封裝 smoke test | DONE | Actions 封裝後啟動 API 驗證 health／OpenAPI，並驗證 EXE／DMG 產物 |
+| 舊版無作用 UI 清理 | VERIFIED | LegacyRanking、Coming 與未使用控制元件已移除；production build 通過 |
 
 ## 驗證紀錄
 

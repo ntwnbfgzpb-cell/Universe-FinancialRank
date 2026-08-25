@@ -19,12 +19,10 @@ import {
   LayoutDashboard,
   Factory,
   SlidersHorizontal,
-  Plus,
   AlertTriangle,
   CheckCircle2,
   Clock3,
   CircleHelp,
-  GitBranch,
   Eye,
   Trash2,
   ExternalLink,
@@ -180,15 +178,6 @@ function Topbar({ backend, onSnapshot }) {
     </header>
   );
 }
-const Select = ({ label, children }) => (
-  <label className="field">
-    <span>{label}</span>
-    <button>
-      {children}
-      <ChevronDown />
-    </button>
-  </label>
-);
 function usePaged(items, initialSize = 20) {
   const [page,setPage]=useState(1),[size,setSize]=useState(initialSize);
   const pages=Math.max(1,Math.ceil(items.length/size)),current=Math.min(page,pages);
@@ -239,162 +228,6 @@ function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleW
       <div className="pagination"><span>符合條件檔數：{rows.length.toLocaleString()} 檔</span><div>每頁顯示 <select value={pageSize} onChange={(e)=>{setPageSize(Number(e.target.value));setPageNumber(1)}}><option>20</option><option>50</option><option>100</option></select><button disabled={current===1} onClick={()=>setPageNumber((p)=>Math.max(1,p-1))}>‹</button>{Array.from({length:Math.min(5,pages)},(_,i)=>Math.min(pages,Math.max(1,current-2)+i)).filter((v,i,a)=>a.indexOf(v)===i).map((value)=><button className={value===current?"current":""} onClick={()=>setPageNumber(value)}>{value}</button>)}<span>{current} / {pages}</span><button disabled={current===pages} onClick={()=>setPageNumber((p)=>Math.min(pages,p+1))}>›</button></div></div>
     </div><RankInsights selected={source.find((row)=>row[3]===selected)||source[0]}/></div>
   </section>;
-}
-function LegacyRanking({ selected, setSelected, openStock, backend, watchlist, toggleWatch }) {
-  const [q, setQ] = useState("");
-  const [market, setMarket] = useState("全部");
-  const rows = useMemo(
-    () =>
-      (backend.rows.length ? backend.rows.map(apiRowToDisplay) : stocks).filter(
-        (s) =>
-          (market === "全部" || s[5] === market) &&
-          (!q || s[3].includes(q) || s[4].includes(q)),
-      ),
-    [q, market, backend.rows],
-  );
-  return (
-    <section className="page rankPage">
-      <div className="pageTitle">
-        <h1>臺股基本面排行榜</h1>
-        <button className="filterSaved">
-          <SlidersHorizontal />
-          篩選條件（已套用 5）
-          <ChevronDown />
-        </button>
-      </div>
-      <div className="filterPanel">
-        <label className="field searchField">
-          <span>股號／名稱</span>
-          <div>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="輸入股號或名稱"
-            />
-            <Search />
-          </div>
-        </label>
-        <label className="field">
-          <span>市場</span>
-          <div className="segments">
-            {["全部", "上市", "上櫃"].map((x) => (
-              <button
-                className={market === x ? "on" : ""}
-                onClick={() => setMarket(x)}
-              >
-                {x}
-              </button>
-            ))}
-          </div>
-        </label>
-        <Select label="產業">全部產業</Select>
-        <Select label="模型">六大財務指標</Select>
-        <label className="field">
-          <span>綜合分數</span>
-          <div className="range">
-            <input placeholder="最小" />
-            <em>~</em>
-            <input placeholder="最大" />
-          </div>
-        </label>
-        <Select label="完整度">全部</Select>
-        <div className="gradeFilter">
-          <b>財務等級（綜合）</b>
-          {["全部", "AA", "A", "BB", "B", "C", "N/A"].map((x, i) => (
-            <label>
-              <input type="checkbox" defaultChecked={i === 0} />
-              {x}
-            </label>
-          ))}
-        </div>
-        <div className="more">
-          <button>
-            <Plus />
-            新增條件
-          </button>
-        </div>
-        <div className="filterActions">
-          <button>清除</button>
-          <button className="primary">套用條件</button>
-        </div>
-      </div>
-      <div className="rankWorkspace">
-        <div className="tablePanel">
-          <table>
-            <thead>
-              <tr>
-                {[
-                  "",
-                  "模型排名",
-                  "同業排名",
-                  "百分位",
-                  "代號",
-                  "名稱",
-                  "市場",
-                  "產業",
-                  "綜合分數",
-                  "完整度",
-                  "營收(億)",
-                  "營益率(%)",
-                  "淨利(億)",
-                  "EPS(元)",
-                  "存貨週轉(次)",
-                  "自由現金流(億)",
-                  "狀態",
-                ].map((x) => (
-                  <th>{x}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((s) => (
-                <tr
-                  className={selected === s[3] ? "selected" : ""}
-                  onClick={() => setSelected(s[3])}
-                  onDoubleClick={openStock}
-                >
-                  <td onClick={(event) => { event.stopPropagation(); toggleWatch(s[3]); }}>
-                    <Star className={watchlist.includes(s[3]) ? "starred" : ""} />
-                  </td>
-                  {s.map((v, i) => (
-                    <td
-                      className={
-                        (i === 3 ? "ticker " : "") +
-                        (i === 8 ? gradeClass(v) : "") +
-                        (String(v).startsWith("-") ? "negative" : "")
-                      }
-                    >
-                      {i === 8 ? <span>{v}</span> : v}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="pagination">
-            <span>符合條件檔數：{rows.length.toLocaleString()} 檔</span>
-            <div>
-              每頁顯示{" "}
-              <button>
-                50
-                <ChevronDown />
-              </button>
-              <button>‹</button>
-              <button className="current">1</button>
-              <button>2</button>
-              <button>3</button>
-              <b>…</b>
-              <button>38</button>
-              <button>›</button>
-            </div>
-          </div>
-        </div>
-        <RankInsights
-          selected={stocks.find((s) => s[3] === selected) || stocks[2]}
-        />
-      </div>
-    </section>
-  );
 }
 function RankInsights({ selected }) {
   return (
@@ -1087,14 +920,5 @@ function SettingsDialog({ close, reload }) {
   const [autoRefresh,setAutoRefresh]=useState(()=>localStorage.getItem("financial-rank-auto-refresh")!=="off");
   const save=()=>{localStorage.setItem("financial-rank-motion",motion?"on":"off");localStorage.setItem("financial-rank-auto-refresh",autoRefresh?"on":"off");document.documentElement.classList.toggle("reducedMotion",!motion);reload();close()};
   return <div className="modalBackdrop" onMouseDown={close}><section className="settingsDialog" onMouseDown={(event)=>event.stopPropagation()}><div className="dialogTitle"><div><h2>桌面程式設定</h2><p>設定只保存在這台電腦。</p></div><button onClick={close}>×</button></div><label className="settingRow"><div><b>自動重新整理</b><span>每 30 秒檢查本機 API 與最新快照</span></div><input type="checkbox" checked={autoRefresh} onChange={(e)=>setAutoRefresh(e.target.checked)}/></label><label className="settingRow"><div><b>宇宙視覺動態</b><span>啟用低速 Liquid Orb 光影；關閉後完全靜止</span></div><input type="checkbox" checked={motion} onChange={(e)=>setMotion(e.target.checked)}/></label><div className="engineInfo"><code>http://127.0.0.1:8765</code><span>僅限本機 loopback，不對外開放。</span></div><div className="dialogActions"><button onClick={close}>取消</button><button className="primary" onClick={save}>儲存設定</button></div></section></div>;
-}
-function Coming({ title }) {
-  return (
-    <section className="page coming">
-      <GitBranch />
-      <h1>{title}</h1>
-      <p>此模組將沿用相同資料快照、品質狀態與可追溯規則。</p>
-    </section>
-  );
 }
 createRoot(document.getElementById("root")).render(<App />);
