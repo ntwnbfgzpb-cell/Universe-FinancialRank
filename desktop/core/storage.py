@@ -348,24 +348,32 @@ class LocalRepository:
 
     def quality_summary(self):
         latest = self.latest_snapshot(status=None)
-        if not latest:
-            return {"universe": 0, "ranked": 0, "provisional": 0, "critical": 0, "jobs": []}
-        snapshot_id = latest["snapshot_id"]
         universe = self.connection.execute(
             "SELECT COUNT(*) FROM securities WHERE valid_to IS NULL"
         ).fetchone()[0]
+        snapshot_id = latest["snapshot_id"] if latest else None
         ranked = self.connection.execute(
             "SELECT COUNT(*) FROM stock_rankings WHERE snapshot_id=? AND rank_status='RANKED'", (snapshot_id,)
-        ).fetchone()[0]
+        ).fetchone()[0] if snapshot_id else 0
         critical = self.connection.execute(
             "SELECT COUNT(*) FROM data_quality_issues WHERE resolved_at IS NULL AND severity='CRITICAL'"
         ).fetchone()[0]
+        issue_counts = {row["severity"]: row["count"] for row in self.connection.execute(
+            "SELECT severity,COUNT(*) AS count FROM data_quality_issues WHERE resolved_at IS NULL GROUP BY severity"
+        )}
+        freshness = [dict(row) for row in self.connection.execute(
+            """SELECT provider,MAX(fetched_at) AS latest_fetched_at,COUNT(*) AS document_count,
+                      CASE WHEN julianday('now')-julianday(MAX(fetched_at))>3 THEN 1 ELSE 0 END AS stale
+               FROM source_documents GROUP BY provider ORDER BY provider"""
+        )]
         jobs = [dict(row) for row in self.connection.execute(
             "SELECT * FROM ingestion_jobs ORDER BY started_at DESC LIMIT 10"
         )]
         return {"universe": universe, "ranked": ranked,
-                "provisional": 1 if latest["status"] == "PROVISIONAL" else 0,
-                "critical": critical, "jobs": jobs, "snapshot_id": snapshot_id}
+                "provisional": 1 if latest and latest["status"] == "PROVISIONAL" else 0,
+                "critical": critical, "issue_counts": issue_counts, "freshness": freshness,
+                "stale_sources": sum(row["stale"] for row in freshness),
+                "jobs": jobs, "snapshot_id": snapshot_id}
 
     def add_quality_issue(self, snapshot_id, security_id, period, field, severity, code, details, provider):
         self.connection.execute(

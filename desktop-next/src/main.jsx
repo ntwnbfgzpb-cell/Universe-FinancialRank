@@ -106,7 +106,7 @@ function App() {
           {page === "watch" && <Watchlist items={watchlist} rows={backend.rows} remove={toggleWatch} open={(symbol) => { setSelected(symbol); setPage("stock"); }} />}
           {page === "stock" && <StockResearch symbol={selected} snapshot={backend.snapshot} />}
           {page === "industry" && <IndustryResearch rows={backend.rows} />}
-          {page === "quality" && <Quality connected={backend.connected} />}
+          {page === "quality" && <Quality backend={backend} />}
           {page === "galaxy" && <Galaxy rows={backend.rows} />}
           {page === "heat" && <Heatmap rows={backend.rows} />}
           {page === "snapshots" && <Snapshots backend={backend} select={load} />}
@@ -703,7 +703,7 @@ function Lineage() {
     </div>
   );
 }
-function Quality() {
+function Quality({backend}) {
   const [syncMessage, setSyncMessage] = useState("");
   const [qualityData,setQualityData]=useState(null);
   const [qualityQuery,setQualityQuery]=useState("");
@@ -717,63 +717,11 @@ function Quality() {
     try { const state=await endpoints.sync(status); setSyncMessage(state.message); }
     catch(error) { setSyncMessage(error.message); }
   };
-  const demoIssues = [
-    [
-      "重大",
-      "2330 台積電",
-      "2024Q1",
-      "營業利益率 OPM",
-      "DQ-MISS-001 缺值",
-      "TWSE OpenAPI",
-      "王小明",
-      "未處理",
-    ],
-    [
-      "重大",
-      "2888 新光金",
-      "2024Q1",
-      "權益報酬率 ROE",
-      "DQ-ANOM-002 異常值",
-      "MOPS",
-      "張小華",
-      "未處理",
-    ],
-    [
-      "中等",
-      "3711 日月光投控",
-      "2024Q1",
-      "負債比率",
-      "DQ-RULE-003 規則不一致",
-      "TWSE OpenAPI",
-      "陳小強",
-      "處理中",
-    ],
-    [
-      "中等",
-      "5534 長虹",
-      "2024Q1",
-      "每股淨值 BVPS",
-      "DQ-MISS-004 缺值",
-      "TPEx OpenAPI",
-      "林小玲",
-      "處理中",
-    ],
-    [
-      "低",
-      "4105 東洋",
-      "2024Q1",
-      "現金及約當現金",
-      "DQ-FMT-005 格式異常",
-      "MOPS",
-      "王小明",
-      "已處理",
-    ],
-  ];
-  const issues=(qualityData?.issues?.length ? qualityData.issues.map((issue)=>[
+  const issues=(qualityData?.issues||[]).map((issue)=>[
     issue.severity === "CRITICAL" ? "重大" : issue.severity === "WARNING" ? "中等" : "低",
     `${issue.symbol || "—"} ${issue.name || ""}`.trim(),issue.period || "—",issue.field,
     `${issue.code} ${issue.details || ""}`,issue.provider,issue.created_at,issue.resolved_at ? "已處理" : "未處理"
-  ]) : demoIssues).filter((row)=>(!qualityQuery||row.join(" ").toLowerCase().includes(qualityQuery.toLowerCase()))&&(severityFilter==="全部"||row[0]===severityFilter)&&(providerFilter==="全部"||row[5]===providerFilter));
+  ]).filter((row)=>(!qualityQuery||row.join(" ").toLowerCase().includes(qualityQuery.toLowerCase()))&&(severityFilter==="全部"||row[0]===severityFilter)&&(providerFilter==="全部"||row[5]===providerFilter));
   const summary=qualityData?.summary;
   const issuePaging=usePaged(issues,20);
   return (
@@ -782,10 +730,7 @@ function Quality() {
         <h1>資料品質與重算管理</h1>
         <div>
           <span>目前查看快照　</span>
-          <button>
-            2024Q1 FINAL v1
-            <ChevronDown />
-          </button>
+          <strong>{backend.snapshot ? `${backend.snapshot.as_of_date} ${backend.snapshot.status} · ${backend.snapshot.rule_version}` : "尚無正式快照"}</strong>
           <button className="sync" onClick={startSync}>
             <RefreshCw />
             同步官方資料
@@ -796,28 +741,14 @@ function Quality() {
       <div className="qualityKpis">
         <div className="fresh">
           <b>來源新鮮度</b>
-          <p>
-            MOPS　
-            <CheckCircle2 />
-            最新：2024-05-15 08:45
-          </p>
-          <p>
-            TWSE OpenAPI　
-            <CheckCircle2 />
-            最新：08:30
-          </p>
-          <p>
-            TPEx OpenAPI　
-            <CheckCircle2 />
-            最新：08:25
-          </p>
+          {(summary?.freshness||[]).length ? summary.freshness.map((source)=><p><span className={source.stale?"staleDot":"liveDot"}/>{source.provider}　最新：{source.latest_fetched_at}（{source.document_count} 份）</p>) : <p>尚無官方來源文件</p>}
         </div>
         {[
-          ["宇宙總數", `${summary?.universe ?? 1750} 檔`, "目前快照公司母體"],
-          ["可排名檔數", `${summary?.ranked ?? 1612} 檔`, summary?.universe ? `${(summary.ranked/summary.universe*100).toFixed(2)}%` : "92.11%"],
+          ["宇宙總數", `${summary?.universe ?? 0} 檔`, "目前公司母體"],
+          ["可排名檔數", `${summary?.ranked ?? 0} 檔`, summary?.universe ? `${(summary.ranked/summary.universe*100).toFixed(2)}%` : "尚無排名"],
           ["臨時 (PROVISIONAL)", summary?.provisional ? "目前使用" : "非目前", "快照發布狀態"],
-          ["資料過期 (>3日)", "17 檔", "0.97%"],
-          ["未解決重大問題", `${summary?.critical ?? 6} 件`, "請儘速處理"],
+          ["過期來源 (>3日)", `${summary?.stale_sources ?? 0} 個`, "依實際 fetched_at 判定"],
+          ["未解決重大問題", `${summary?.critical ?? 0} 件`, "請儘速處理"],
         ].map((x, i) => (
           <div>
             <small>{x[0]}</small>
@@ -839,14 +770,7 @@ function Quality() {
           <div className="miniFilters">
             <select value={severityFilter} onChange={(e)=>setSeverityFilter(e.target.value)}><option>全部</option><option>重大</option><option>中等</option><option>低</option></select>
             <select value={providerFilter} onChange={(e)=>setProviderFilter(e.target.value)}><option>全部</option>{[...new Set((qualityData?.issues||[]).map((issue)=>issue.provider))].filter(Boolean).map((provider)=><option>{provider}</option>)}</select>
-            <button>
-              模型／排名　全部
-              <ChevronDown />
-            </button>
-            <button>
-              問題狀態　未解決
-              <ChevronDown />
-            </button>
+            <span className="filterContext">目前僅列出未解決問題</span>
             <input value={qualityQuery} onChange={(e)=>setQualityQuery(e.target.value)} placeholder="搜尋代碼／名稱／問題代碼" />
           </div>
           <div className="issueTable">
@@ -1011,6 +935,16 @@ function Galaxy({ rows }) {
   const industries=[...new Set(source.map((row)=>row.industry))];
   const visible=source.filter((row)=>industry==="全部"||row.industry===industry).slice(0,120);
   const centers=new Map(industries.map((name,index)=>[name,{x:180+(index%4)*290,y:170+Math.floor(index/4)*250}]));
+  const nodes=visible.map((row,i)=>{const center=centers.get(row.industry)||{x:600,y:350},a=i*2.399,r=25+(i%14)*11;return {row,x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r}});
+  const edges=[];
+  for(let i=0;i<nodes.length;i++) for(let j=i+1;j<nodes.length;j++){
+    const a=nodes[i].row,b=nodes[j].row;
+    const scoreGap=Math.abs(Number(a.overall_score||0)-Number(b.overall_score||0))/4;
+    const percentileGap=Math.abs(Number(a.model_percentile||0)-Number(b.model_percentile||0))/100;
+    const similarity=Math.max(0,1-(scoreGap*.55+percentileGap*.45))*(a.industry===b.industry?1:.72);
+    if(similarity>=threshold) edges.push({a:nodes[i],b:nodes[j],similarity});
+  }
+  edges.sort((a,b)=>b.similarity-a.similarity); const shownEdges=edges.slice(0,260);
   return (
     <section className="page visualPage">
       <div className="pageTitle">
@@ -1026,34 +960,35 @@ function Galaxy({ rows }) {
       <div className="galaxyCanvas">
         <div className="liquidOrbBackdrop"><i/><b/></div>
         <svg viewBox="0 0 1200 700">
-          {visible.map((row,i) => {
-            const center=centers.get(row.industry)||{x:600,y:350},a=i*2.399,r=25+(i%14)*11;
-            return (
+          <g className="similarityEdges">{shownEdges.map((edge,index)=><line key={index} x1={edge.a.x} y1={edge.a.y} x2={edge.b.x} y2={edge.b.y} style={{opacity:.05+(edge.similarity-threshold)*.32}}/>)}</g>
+          {nodes.map(({row,x,y},i) => (
               <circle
-                cx={center.x + Math.cos(a) * r}
-                cy={center.y + Math.sin(a) * r}
+                key={row.symbol}
+                cx={x}
+                cy={y}
                 r={4 + Number(row.model_percentile||70)/20}
                 className={"node n" + (i % 4)}
                 onClick={()=>setFocus(row)}
               />
-            );
-          })}
+          ))}
           <g className="clusterLabels">
             {industries.slice(0,8).map((name)=><text x={(centers.get(name)?.x||600)-50} y={(centers.get(name)?.y||350)-105}>{name}</text>)}
           </g>
         </svg>
         {focus&&<div className="nodeInspector"><button onClick={()=>setFocus(null)}>×</button><b>{focus.symbol} {focus.name}</b><span>{focus.industry}</span><strong>百分位 {Number(focus.model_percentile||0).toFixed(1)}</strong><small>綜合分數 {focus.overall_score}</small></div>}
         <div className="canvasLegend">
-          節點大小：模型百分位　光環：完整度　連線：標準化關聯強度
+          節點大小：模型百分位　連線：分數與百分位相似度（顯示 {shownEdges.length} 條最強關聯）
         </div>
       </div>
     </section>
   );
 }
 function Heatmap({ rows }) {
-  const [flat,setFlat]=useState(false),[focus,setFocus]=useState(null);
+  const [flat,setFlat]=useState(false),[focus,setFocus]=useState(null),[industry,setIndustry]=useState("全部"),[heightMetric,setHeightMetric]=useState("percentile");
   const source=rows.length?rows:stocks.map((item)=>({symbol:item[3],name:item[4],industry:item[6],model_percentile:item[2],overall_score:item[7]}));
-  const cells=source.slice(0,160).map((row,i)=>({x:i%16,y:Math.floor(i/16),h:20+Number(row.model_percentile||0),v:Number(row.model_percentile||0),row}));
+  const industries=[...new Set(source.map((row)=>row.industry))].sort();
+  const filtered=source.filter((row)=>industry==="全部"||row.industry===industry).sort((a,b)=>Number(b.model_percentile||0)-Number(a.model_percentile||0));
+  const cells=filtered.slice(0,160).map((row,i)=>{const v=heightMetric==="score"?Number(row.overall_score||0)*25:Number(row.model_percentile||0);return {x:i%16,y:Math.floor(i/16),h:20+v,v,row}});
   return (
     <section className="page visualPage">
       <div className="pageTitle">
@@ -1062,6 +997,8 @@ function Heatmap({ rows }) {
           <p>產業、綜合分數、模型百分位與完整度的立體分布。</p>
         </div>
         <div>
+          <select value={industry} onChange={(e)=>setIndustry(e.target.value)}><option value="全部">全部產業</option>{industries.map((name)=><option value={name}>{name}</option>)}</select>
+          <select value={heightMetric} onChange={(e)=>setHeightMetric(e.target.value)}><option value="percentile">高度：模型百分位</option><option value="score">高度：綜合分數</option></select>
           <button className={!flat?"activeView":""} onClick={()=>setFlat(false)}>透視檢視</button>
           <button className={flat?"activeView":""} onClick={()=>setFlat(true)}>展平為 2D</button>
         </div>
@@ -1079,7 +1016,7 @@ function Heatmap({ rows }) {
         <div className="axis x">產業 →</div>
         <div className="axis y">綜合分數 →</div>
         <div className="canvasLegend">
-          Z：模型內百分位　顏色：財務等級　柱頂：資料完整度
+          Z：{heightMetric==="score"?"綜合分數":"模型內百分位"}　顏色：高度區間　目前顯示 {cells.length} 檔
         </div>
         {focus&&<div className="heatInspector"><button onClick={()=>setFocus(null)}>×</button><b>{focus.symbol} {focus.name}</b><span>{focus.industry}</span><strong>{focus.overall_score} 分</strong><small>模型百分位 {Number(focus.model_percentile||0).toFixed(1)}</small></div>}
       </div>

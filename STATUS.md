@@ -7,8 +7,8 @@
 | 圖片素材與透明度 QA | VERIFIED | 14 組正式素材，含產業星座與 Rank 歷史空狀態 |
 | 排行榜、篩選、CSV | DONE | app/index.html、app/app.js |
 | 個股詳情與決策軌跡 | DONE | app/app.js |
-| 星系關聯圖 | DONE | Canvas 可視化骨架；待正式關聯資料 |
-| 3D 排名熱力圖 | DONE | 立體視覺骨架；待 Three.js |
+| 星系關聯圖 | VERIFIED | 真實排名節點，依分數、百分位與產業權重計算關聯邊，可調門檻與檢視個股 |
+| 3D 排名熱力圖 | VERIFIED | CSS 3D 即時柱體、真實排名資料、產業篩選、高度指標與 2D／透視切換 |
 | 資料品質頁 | VERIFIED | 已串 SQLite 品質摘要、問題清單與匯入工作紀錄 |
 | Decimal 六指標規則引擎 | VERIFIED | 規則、邊界、N/A 與平均分測試通過 |
 | SQLite 不可變快照 | VERIFIED | checksum、metric trace、ranking persistence 測試通過 |
@@ -49,11 +49,13 @@
 | 跨模組分頁瀏覽 | VERIFIED | 排行榜、選股、產業、快照、Rank 歷史、血緣、來源與品質清單共用分頁控制 |
 | 品質治理五頁籤 | VERIFIED | 新鮮度、異常、工作、Taxonomy 與對帳皆可瀏覽；不再顯示虛構 QA 成績 |
 | AI 補充空狀態素材 | VERIFIED | 產業星座與 Rank 歷史軌道圖已生成、透明度檢查並接入程式 |
+| 品質摘要真實化 | VERIFIED | 來源新鮮度、文件數、過期來源、問題統計及擷取工作全部讀取 SQLite |
+| 星系相似度連線 | VERIFIED | 不使用靜態示意線；由目前快照分數、百分位及產業關係即時計算 |
 
 ## 驗證紀錄
 
 - JavaScript 語法檢查：通過。
 - 本機 HTTP 啟動：通過。
 - Playwright：套件可用，但執行環境缺少 Chromium binary，無法完成桌機／手機截圖及概念稿像素比對，因此視覺項目維持 DONE，尚未標 VERIFIED。
-- Python：38 項自動測試通過。
+- Python：39 項自動測試通過。
 - React/Vite production build：通過；所有新增分頁與品質頁籤均完成編譯驗證。

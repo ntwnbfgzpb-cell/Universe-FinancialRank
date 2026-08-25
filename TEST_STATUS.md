@@ -16,6 +16,8 @@
 | 本機 API | PASS | ThreadingHTTPServer health 跨執行緒請求 |
 | 官方 Bronze 同步 | PASS | allowlist、原始 payload、列數與 SHA-256 manifest |
 | 動態資料品質 | PASS | 匯入結果可產生品質摘要與問題紀錄 |
+| 來源新鮮度摘要 | PASS | 無快照時仍依 source_documents 回傳供應者、最後擷取時間、文件數與過期狀態 |
+| React production build | PASS | Vite 1805 modules；品質頁、星系關聯與熱力圖控制完成編譯 |
 | Bronze→Silver | PASS | 公司主檔、普通股候選與月營收 YoY 轉換 |
 | 財務轉換 | PASS | Q4 單季化、缺季、FCF 符號、零庫存、零基期 |
 | 規則治理 | PASS | checksum、重複 rule_id／priority 阻擋 |

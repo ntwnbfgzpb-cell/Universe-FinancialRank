@@ -7,6 +7,21 @@ from desktop.core.storage import LocalRepository
 
 
 class StorageTests(unittest.TestCase):
+    def test_quality_summary_reports_real_source_freshness_without_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = LocalRepository(Path(directory) / "rank.db")
+            repository.connection.execute(
+                "INSERT INTO source_documents VALUES(?,?,?,?,?,?,?)",
+                ("source-1","TWSE","fixture","2099-01-01","2099-01-02","a"*64,"v1"),
+            )
+            repository.connection.commit()
+            summary = repository.quality_summary()
+            self.assertEqual(summary["universe"], 0)
+            self.assertEqual(summary["freshness"][0]["provider"], "TWSE")
+            self.assertEqual(summary["freshness"][0]["document_count"], 1)
+            self.assertEqual(summary["stale_sources"], 0)
+            repository.close()
+
     def test_latest_facts_by_security_returns_newest_period(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = LocalRepository(Path(directory) / "rank.db")
