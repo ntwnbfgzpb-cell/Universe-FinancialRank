@@ -50,13 +50,22 @@ const nav = [
   ["help", "使用教學", BookOpen],
 ];
 const gradeClass = (g) => "grade g-" + g.replace("/", "");
+const readLocalJson = (key, fallback) => {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "null");
+    return value ?? fallback;
+  } catch {
+    localStorage.removeItem(key);
+    return fallback;
+  }
+};
 const apiRowToDisplay = (row) => [
   row.rank_model ?? "—", `${row.rank_industry ?? "—"} / —`, Number(row.model_percentile || 0).toFixed(1),
   row.symbol, row.name, row.market, row.industry, Number(row.overall_score || 0).toFixed(1),
   Number(row.overall_score || 0) >= 3.5 ? "AA" : Number(row.overall_score || 0) >= 3 ? "A" : Number(row.overall_score || 0) >= 2.5 ? "BB" : Number(row.overall_score || 0) >= 2 ? "B" : "C",
-  row.financial_values?.revenue?.value || "—", row.financial_values?.operating_margin?.value || "—",
-  row.financial_values?.net_profit?.value || "—", row.financial_values?.eps?.value || "—",
-  row.financial_values?.inventory_turnover?.value || "—", row.financial_values?.free_cash_flow?.value || "—",
+  row.financial_values?.revenue?.value ?? "—", row.financial_values?.operating_margin?.value ?? "—",
+  row.financial_values?.net_profit?.value ?? "—", row.financial_values?.eps?.value ?? "—",
+  row.financial_values?.inventory_turnover?.value ?? "—", row.financial_values?.free_cash_flow?.value ?? "—",
   row.rank_status || "正常", row.model_code || "—",
   `${row.valid_count ?? 0} / ${String(row.model_code||"").startsWith("TW4F") ? 4 : 6}`,
 ];
@@ -68,7 +77,7 @@ function App() {
   const [backend, setBackend] = useState({ connected: false, snapshots: [], snapshot: null, rows: [], error: "" });
   const selectedSnapshotRef=useRef(null);
   const loadRequestRef=useRef(0);
-  const [watchlist, setWatchlist] = useState(() => JSON.parse(localStorage.getItem("financial-rank-watchlist") || "[]"));
+  const [watchlist, setWatchlist] = useState(() => readLocalJson("financial-rank-watchlist", []));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const setPage=(next)=>{setPageState(next);if(location.hash.slice(1).split("?")[0]!==next)location.hash=next};
   const load = async (snapshotId=selectedSnapshotRef.current) => {
@@ -170,7 +179,7 @@ function Topbar({ backend, onSnapshot }) {
   return (
     <header className="topbar">
       <select className="snapshot" value={backend.snapshot?.snapshot_id || ""} onChange={(event) => onSnapshot(event.target.value)}>
-        {backend.snapshots.length ? backend.snapshots.map((item) => <option key={item.snapshot_id} value={item.snapshot_id}>{item.as_of_date} {item.status} · {item.rule_version}</option>) : <option>{snapshotText}</option>}
+        {backend.snapshots.length ? backend.snapshots.map((item) => <option key={item.snapshot_id} value={item.snapshot_id}>{item.as_of_date} {item.status} · {item.rule_version}</option>) : <option value="">{snapshotText}</option>}
       </select>
       <div className="topMeta">
         資料日期：{backend.snapshot?.as_of_date || "尚無正式資料"} <CircleHelp />
@@ -199,7 +208,7 @@ function Pager({ total, paging, label="筆" }) {
 }
 const defaultRankFilters={q:"",market:"全部",industry:"全部",grade:"全部",completeness:"全部",min:"",max:""};
 function readRankView(){
-  const fallback=JSON.parse(localStorage.getItem("financial-rank-view")||"null")||{};
+  const fallback=readLocalJson("financial-rank-view", {});
   if(!location.hash.startsWith("#rank?")) return {filters:{...defaultRankFilters,...fallback.filters},sort:fallback.sort||{column:0,direction:1},pageSize:fallback.pageSize||20,page:1};
   const query=new URLSearchParams(location.hash.split("?")[1]);
   return {filters:{...defaultRankFilters,q:query.get("q")||"",market:query.get("market")||"全部",industry:query.get("industry")||"全部",grade:query.get("grade")||"全部",completeness:query.get("complete")||"全部",min:query.get("min")||"",max:query.get("max")||""},sort:{column:Number(query.get("sort")||0),direction:Number(query.get("dir")||1)},pageSize:Number(query.get("size")||20),page:Number(query.get("page")||1)};
@@ -216,8 +225,8 @@ function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleW
   const [sort, setSort] = useState(initial.sort);
   const [pageNumber, setPageNumber] = useState(initial.page);
   const [pageSize, setPageSize] = useState(initial.pageSize);
-  const [presets,setPresets]=useState(()=>JSON.parse(localStorage.getItem("financial-rank-presets")||"[]"));
-  const source = useMemo(()=>backend.rows.length ? backend.rows.map(apiRowToDisplay) : stocks.map((row)=>[...row,"TW6F_GENERAL","6 / 6"]),[backend.rows]);
+  const [presets,setPresets]=useState(()=>readLocalJson("financial-rank-presets", []));
+  const source = useMemo(()=>backend.connected ? backend.rows.map(apiRowToDisplay) : stocks.map((row)=>[...row,"TW6F_GENERAL","6 / 6"]),[backend.connected,backend.rows]);
   const industries = useMemo(()=>[...new Set(source.map((row)=>row[6]))].sort(),[source]);
   const setFilter = (key,value) => { setFilters((state)=>({...state,[key]:value}));setPageNumber(1); };
   const rows = useMemo(()=>source.filter((row)=>(
@@ -245,19 +254,19 @@ function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleW
   const loadPreset=(name)=>{const preset=presets.find((item)=>item.name===name);if(!preset)return;setFilters({...defaultRankFilters,...preset.filters});setSort(preset.sort||{column:0,direction:1});setPageSize(preset.pageSize||20);setPageNumber(1)};
   const deletePreset=()=>{const name=window.prompt("請輸入要刪除的條件模板名稱");if(!name)return;const next=presets.filter((item)=>item.name!==name);setPresets(next);localStorage.setItem("financial-rank-presets",JSON.stringify(next))};
   return <section className="page rankPage">
-    <div className="pageTitle"><h1>臺股基本面排行榜</h1><div className="rankCommands"><select defaultValue="" onChange={(e)=>loadPreset(e.target.value)}><option value="">載入條件模板</option>{presets.map((item)=><option value={item.name}>{item.name}</option>)}</select><button onClick={savePreset}>儲存條件</button>{presets.length>0&&<button onClick={deletePreset}>刪除模板</button>}<button className="primary" onClick={()=>exportRowsCsv(rows,headers)}><Download/>匯出篩選結果</button><span className="filterSaved"><SlidersHorizontal/>條件已同步網址</span></div></div>
+    <div className="pageTitle"><h1>臺股基本面排行榜</h1><div className="rankCommands"><select defaultValue="" onChange={(e)=>loadPreset(e.target.value)}><option value="">載入條件模板</option>{presets.map((item)=><option key={item.name} value={item.name}>{item.name}</option>)}</select><button onClick={savePreset}>儲存條件</button>{presets.length>0&&<button onClick={deletePreset}>刪除模板</button>}<button className="primary" onClick={()=>exportRowsCsv(rows,headers)}><Download/>匯出篩選結果</button><span className="filterSaved"><SlidersHorizontal/>條件已同步網址</span></div></div>
     <div className="filterPanel realFilters">
       <label className="field searchField"><span>股號／名稱</span><div><input value={filters.q} onChange={(e)=>setFilter("q",e.target.value)} placeholder="輸入股號或名稱"/><Search/></div></label>
-      <label className="field"><span>市場</span><div className="segments">{["全部","上市","上櫃"].map((value)=><button className={filters.market===value?"on":""} onClick={()=>setFilter("market",value)}>{value}</button>)}</div></label>
-      <label className="field"><span>產業</span><select value={filters.industry} onChange={(e)=>setFilter("industry",e.target.value)}><option>全部</option>{industries.map((value)=><option>{value}</option>)}</select></label>
+      <label className="field"><span>市場</span><div className="segments">{["全部","上市","上櫃"].map((value)=><button key={value} className={filters.market===value?"on":""} onClick={()=>setFilter("market",value)}>{value}</button>)}</div></label>
+      <label className="field"><span>產業</span><select value={filters.industry} onChange={(e)=>setFilter("industry",e.target.value)}><option>全部</option>{industries.map((value)=><option key={value}>{value}</option>)}</select></label>
       <label className="field"><span>綜合分數</span><div className="range"><input type="number" value={filters.min} onChange={(e)=>setFilter("min",e.target.value)} placeholder="最小"/><em>~</em><input type="number" value={filters.max} onChange={(e)=>setFilter("max",e.target.value)} placeholder="最大"/></div></label>
       <label className="field"><span>完整度</span><select value={filters.completeness} onChange={(e)=>setFilter("completeness",e.target.value)}><option>全部</option><option>完整</option><option>有缺漏</option></select></label>
-      <label className="field"><span>財務等級</span><select value={filters.grade} onChange={(e)=>setFilter("grade",e.target.value)}>{["全部","AA","A","BB","B","C","N/A"].map((value)=><option>{value}</option>)}</select></label>
+      <label className="field"><span>財務等級</span><select value={filters.grade} onChange={(e)=>setFilter("grade",e.target.value)}>{["全部","AA","A","BB","B","C","N/A"].map((value)=><option key={value}>{value}</option>)}</select></label>
       <div className="filterActions"><button onClick={clear}>清除</button><button className="primary" onClick={()=>setPageNumber(1)}>套用條件</button></div>
     </div>
-    <div className="rankWorkspace"><div className="tablePanel"><table><thead><tr><th></th>{headers.map((label,index)=><th><button className="sortButton" onClick={()=>index<8&&sortBy(index)}>{label}{index<8&&sort.column===index?(sort.direction>0?" ↑":" ↓"):""}</button></th>)}</tr></thead><tbody>{visible.map((row)=><tr className={selected===row[3]?"selected":""} onClick={()=>setSelected(row[3])} onDoubleClick={openStock}><td onClick={(event)=>{event.stopPropagation();toggleWatch(row[3])}}><Star className={watchlist.includes(row[3])?"starred":""}/></td>{row.map((value,index)=><td className={(index===3?"ticker ":"")+(index===8?gradeClass(value):"")+(String(value).startsWith("-")?" negative":"")}>{index===8?<span>{value}</span>:value}</td>)}</tr>)}</tbody></table>
+    <div className="rankWorkspace"><div className="tablePanel"><table><thead><tr><th></th>{headers.map((label,index)=><th key={label}><button className="sortButton" onClick={()=>index<8&&sortBy(index)}>{label}{index<8&&sort.column===index?(sort.direction>0?" ↑":" ↓"):""}</button></th>)}</tr></thead><tbody>{visible.map((row)=><tr key={row[3]} className={selected===row[3]?"selected":""} onClick={()=>setSelected(row[3])} onDoubleClick={openStock}><td onClick={(event)=>{event.stopPropagation();toggleWatch(row[3])}}><Star className={watchlist.includes(row[3])?"starred":""}/></td>{row.map((value,index)=><td key={`${row[3]}-${index}`} className={(index===3?"ticker ":"")+(index===8?gradeClass(value):"")+(String(value).startsWith("-")?" negative":"")}>{index===8?<span>{value}</span>:value}</td>)}</tr>)}</tbody></table>
       {!visible.length&&<div className="tableEmpty">沒有符合條件的公司，請調整篩選條件。</div>}
-      <div className="pagination"><span>符合條件檔數：{rows.length.toLocaleString()} 檔</span><div>每頁顯示 <select value={pageSize} onChange={(e)=>{setPageSize(Number(e.target.value));setPageNumber(1)}}><option>20</option><option>50</option><option>100</option></select><button disabled={current===1} onClick={()=>setPageNumber((p)=>Math.max(1,p-1))}>‹</button>{Array.from({length:Math.min(5,pages)},(_,i)=>Math.min(pages,Math.max(1,current-2)+i)).filter((v,i,a)=>a.indexOf(v)===i).map((value)=><button className={value===current?"current":""} onClick={()=>setPageNumber(value)}>{value}</button>)}<span>{current} / {pages}</span><button disabled={current===pages} onClick={()=>setPageNumber((p)=>Math.min(pages,p+1))}>›</button></div></div>
+      <div className="pagination"><span>符合條件檔數：{rows.length.toLocaleString()} 檔</span><div>每頁顯示 <select value={pageSize} onChange={(e)=>{setPageSize(Number(e.target.value));setPageNumber(1)}}><option>20</option><option>50</option><option>100</option></select><button disabled={current===1} onClick={()=>setPageNumber((p)=>Math.max(1,p-1))}>‹</button>{Array.from({length:Math.min(5,pages)},(_,i)=>Math.min(pages,Math.max(1,current-2)+i)).filter((v,i,a)=>a.indexOf(v)===i).map((value)=><button key={value} className={value===current?"current":""} onClick={()=>setPageNumber(value)}>{value}</button>)}<span>{current} / {pages}</span><button disabled={current===pages} onClick={()=>setPageNumber((p)=>Math.min(pages,p+1))}>›</button></div></div>
     </div><RankInsights selected={source.find((row)=>row[3]===selected)||source[0]} rows={source}/></div>
   </section>;
 }
@@ -279,10 +288,7 @@ function RankInsights({ selected,rows }) {
         )})}
       </Panel>
       <Panel title="所選個股六大指標雷達圖">
-        <p>
-          {selected[3]} {selected[4]}（綜合分數 {selected[7]} / {selected[8]}）
-        </p>
-        <Radar />
+        {selected ? <><p>{selected[3]} {selected[4]}（綜合分數 {selected[7]} / {selected[8]}）</p><Radar /></> : <p>目前沒有可顯示的公司資料。</p>}
       </Panel>
       <Panel title="財務等級分布">
         <div className="donut">
