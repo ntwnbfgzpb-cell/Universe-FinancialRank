@@ -1,0 +1,46 @@
+# 即時進度
+
+最後更新：2026-08-25
+
+| 工作 | 狀態 | 證據／下一步 |
+|---|---|---|
+| 圖片素材與透明度 QA | VERIFIED | 10 組正式素材 |
+| 排行榜、篩選、CSV | DONE | app/index.html、app/app.js |
+| 個股詳情與決策軌跡 | DONE | app/app.js |
+| 星系關聯圖 | DONE | Canvas 可視化骨架；待正式關聯資料 |
+| 3D 排名熱力圖 | DONE | 立體視覺骨架；待 Three.js |
+| 資料品質頁 | VERIFIED | 已串 SQLite 品質摘要、問題清單與匯入工作紀錄 |
+| Decimal 六指標規則引擎 | VERIFIED | 規則、邊界、N/A 與平均分測試通過 |
+| SQLite 不可變快照 | VERIFIED | checksum、metric trace、ranking persistence 測試通過 |
+| DENSE_RANK 與快照原子性 | VERIFIED | 同分 1、1、2 測試；交易內無獨立 commit |
+| 官方 CSV adapter 介面 | DONE | desktop/core/providers.py；待實際官方檔驗證 |
+| 離線 CSV 匯入管線 | VERIFIED | 欄位／日期／模型驗證、future cutoff、不可變快照測試通過 |
+| 桌面匯入後資料串接 | VERIFIED | 排行榜、個股與熱力圖改讀最新快照 |
+| 分組排名與模型百分位 | VERIFIED | 模型／市場／產業分組與 DENSE_RANK 測試通過 |
+| 唯讀本機 API | VERIFIED | stdlib HTTP API 執行緒 smoke test 通過 |
+| Windows／macOS 打包腳本 | DONE | 需在對應目標 OS 執行 PyInstaller 驗證 |
+| FastAPI、PostgreSQL | DEFERRED | 正式多人服務端階段；單機版先採 SQLite + stdlib API |
+| 證交所 OpenAPI Bronze 同步 | VERIFIED | 14 組 allowlist、原始 JSON、SHA-256 manifest 與 mock 網路測試 |
+| Bronze→Silver 月營收串接 | VERIFIED | 公司主檔、普通股候選、月營收 YoY 與 PARTIAL 報告測試 |
+| 累計財報單季化與衍生公式 | VERIFIED | Q4、缺季、Core FCF 符號、零庫存及零基期測試 |
+| 規則治理與 checksum | VERIFIED | 啟動驗證 rule_id／priority／Decimal，快照保存規則 checksum |
+| 歷史快照切換 | DONE | 桌面視窗可依日期、狀態、版本與 checksum 載入 |
+| 備份與還原 | VERIFIED | SQLite backup、SHA-256、integrity_check、拒絕意外覆寫 |
+| MOPS XBRL→Silver | VERIFIED | 精確 tag、manifest、單季化、衍生六指標與未映射報告測試 |
+| 證券生命週期 | VERIFIED | 公司關係、ISIN／統編／代號歷史、公司行動與代號變更測試 |
+| OpenAPI 與分頁 | VERIFIED | OpenAPI 3.0.3、page_size 驗證與相容回傳 |
+| 個股歷史／血緣視窗 | DONE | 桌面可檢視快照歷史、規則、原始事實與來源 SHA-256 |
+| TWSE 自動取得 | VERIFIED | 固定 allowlist、原檔 manifest 與 mock HTTP 測試 |
+| TPEx 自動取得 | VERIFIED | Swagger 動態發現、公司／月營收 Silver 合併與 403 降級 |
+| MOPS 公開檔下載 | DONE | 同網域公開 ZIP/XBRL/XML；不繞過安全限制 |
+| 一鍵更新與每日排程 | DONE | 桌面按鈕、CLI pipeline、PROVISIONAL 預設與 scheduler |
+| 跨批次歷史事實累積 | VERIFIED | 依 available_at cutoff 從 SQLite 累積重算 |
+| 完整 taxonomy 與 30 檔對帳 | BLOCKED | 需 Core FCF 現金流細項及可連官方站點／真實官方檔 |
+| 原生桌面視窗版 | DONE | desktop/desktop_app.py；待有圖形顯示環境完成視覺驗證 |
+
+## 驗證紀錄
+
+- JavaScript 語法檢查：通過。
+- 本機 HTTP 啟動：通過。
+- Playwright：套件可用，但執行環境缺少 Chromium binary，無法完成桌機／手機截圖及概念稿像素比對，因此視覺項目維持 DONE，尚未標 VERIFIED。
+- Python：37 項自動測試通過。
