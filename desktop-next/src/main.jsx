@@ -155,7 +155,7 @@ function Topbar({ backend, onSnapshot }) {
         {backend.snapshots.length ? backend.snapshots.map((item) => <option key={item.snapshot_id} value={item.snapshot_id}>{item.as_of_date} {item.status} · {item.rule_version}</option>) : <option>{snapshotText}</option>}
       </select>
       <div className="topMeta">
-        資料日期：2026-08-24 <CircleHelp />
+        資料日期：{backend.snapshot?.as_of_date || "展示資料"} <CircleHelp />
         <span className={backend.connected ? "synced" : "offline"}>
           {backend.connected ? <CheckCircle2 /> : <AlertTriangle />}
           {backend.connected
