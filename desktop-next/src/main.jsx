@@ -326,6 +326,7 @@ function Radar() {
         ))}
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <line
+            key={i}
             x2={Math.cos(-Math.PI / 2 + (i * Math.PI) / 3) * 80}
             y2={Math.sin(-Math.PI / 2 + (i * Math.PI) / 3) * 80}
           />
@@ -375,9 +376,9 @@ function StockResearch({ symbol, snapshot }) {
             ["產業排名", `${record?.rank_industry || "—"} / —`],
             ["模型百分位", `${Number(record?.model_percentile || fallback[2]).toFixed(1)}%`],
             ["資料快照", snapshot?.status || "展示"],
-            ["資料截止日", snapshot?.as_of_date || "2024/04/30"],
+            ["資料截止日", snapshot?.as_of_date || "尚無正式資料"],
           ].map((x, i) => (
-            <div>
+            <div key={x[0]}>
               <small>{x[0]}</small>
               <strong className={i === 0 ? "goldText" : ""}>{x[1]}</strong>
             </div>
@@ -386,7 +387,7 @@ function StockResearch({ symbol, snapshot }) {
       </div>
       <div className="metricStrip">
         {metrics.map((m, i) => (
-          <div className={i === metricIndex ? "active" : ""} onClick={()=>setMetricIndex(i)}>
+          <div key={m} className={i === metricIndex ? "active" : ""} onClick={()=>setMetricIndex(i)}>
             <span>{i + 1}</span>
             <b>{m}</b>
             <strong>
@@ -877,8 +878,8 @@ function Dashboard({ backend, setPage }) {
       <div><h1>六大財務指標宇宙</h1><p>把營收、獲利、EPS、存貨與自由現金流整合成可追溯的全市場排名。</p><button className="heroButton" onClick={() => setPage("rank")}>查看完整排行榜 <ExternalLink /></button></div>
       <div className="heroStatus"><span className={backend.connected ? "liveDot" : "warnDot"} />{backend.connected ? "官方快照資料已連線" : "展示模式｜啟動桌面資料引擎後自動串接"}</div>
     </div>
-    <div className="summaryGrid">{[["可排名公司", rows.length, "檔"], ["產業群組", industries, "組"], ["最新快照", backend.snapshot?.status || "展示", ""], ["規則版本", backend.snapshot?.rule_version || "v1.2", ""]].map(([label, value, unit]) => <div><small>{label}</small><strong>{value}<em>{unit}</em></strong></div>)}</div>
-    <div className="dashboardGrid"><Panel title="排名領先公司"><table className="cleanTable"><tbody>{rows.slice(0, 7).map((row, index) => <tr><td><b>{index + 1}</b></td><td>{row.symbol}　{row.name}</td><td>{row.industry}</td><td>{Number(row.overall_score).toFixed(1)}</td></tr>)}</tbody></table></Panel><Panel title="模型百分位概況"><Bars values={rows.slice(0, 12).map((row) => Math.max(20, Number(row.model_percentile || 70)))} /></Panel></div>
+    <div className="summaryGrid">{[["可排名公司", rows.length, "檔"], ["產業群組", industries, "組"], ["最新快照", backend.snapshot?.status || "展示", ""], ["規則版本", backend.snapshot?.rule_version || "尚未載入", ""]].map(([label, value, unit]) => <div key={label}><small>{label}</small><strong>{value}<em>{unit}</em></strong></div>)}</div>
+    <div className="dashboardGrid"><Panel title="排名領先公司"><table className="cleanTable"><tbody>{rows.slice(0, 7).map((row, index) => <tr key={row.symbol}><td><b>{index + 1}</b></td><td>{row.symbol}　{row.name}</td><td>{row.industry}</td><td>{Number(row.overall_score).toFixed(1)}</td></tr>)}</tbody></table></Panel><Panel title="模型百分位概況"><Bars values={rows.slice(0, 12).map((row) => Math.max(20, Number(row.model_percentile || 70)))} /></Panel></div>
   </section>;
 }
 
@@ -887,7 +888,7 @@ function Watchlist({ items, rows, remove, open }) {
   const selectedRows = source.filter((row) => items.includes(row[3]));
   const paging=usePaged(selectedRows,20);
   return <section className="page modulePage"><div className="pageTitle"><div><h1>選股清單</h1><p>收藏會保存在本機，不會上傳到外部服務。</p></div><span>{selectedRows.length} 檔</span></div>
-    {selectedRows.length ? <div className="moduleTable"><table><thead><tr><th>代號／名稱</th><th>市場</th><th>產業</th><th>模型排名</th><th>百分位</th><th>綜合分數</th><th>操作</th></tr></thead><tbody>{paging.visible.map((row) => <tr><td><b>{row[3]}</b>　{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[0]}</td><td>{row[2]}%</td><td>{row[7]}</td><td><button onClick={() => open(row[3])}><Eye />研究</button><button onClick={() => remove(row[3])}><Trash2 />移除</button></td></tr>)}</tbody></table><Pager total={selectedRows.length} paging={paging} label="檔"/></div> : <div className="emptyState"><img src="./assets/empty-watchlist-telescope.png" alt="望遠鏡搜尋財務星系"/><h2>尚未加入選股清單</h2><p>在排行榜點擊星號，即可建立自己的研究清單。</p></div>}
+    {selectedRows.length ? <div className="moduleTable"><table><thead><tr><th>代號／名稱</th><th>市場</th><th>產業</th><th>模型排名</th><th>百分位</th><th>綜合分數</th><th>操作</th></tr></thead><tbody>{paging.visible.map((row) => <tr key={row[3]}><td><b>{row[3]}</b>　{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[0]}</td><td>{row[2]}%</td><td>{row[7]}</td><td><button onClick={() => open(row[3])}><Eye />研究</button><button onClick={() => remove(row[3])}><Trash2 />移除</button></td></tr>)}</tbody></table><Pager total={selectedRows.length} paging={paging} label="檔"/></div> : <div className="emptyState"><img src="./assets/empty-watchlist-telescope.png" alt="望遠鏡搜尋財務星系"/><h2>尚未加入選股清單</h2><p>在排行榜點擊星號，即可建立自己的研究清單。</p></div>}
   </section>;
 }
 
@@ -900,7 +901,7 @@ function IndustryResearch({ rows }) {
 
 function Snapshots({ backend, select }) {
   const paging=usePaged(backend.snapshots,20);
-  return <section className="page modulePage"><div className="pageTitle"><div><h1>資料快照</h1><p>FINAL 快照不可變更；PROVISIONAL 可供同步後驗證。</p></div></div>{backend.snapshots.length?<div className="moduleTable"><table><thead><tr><th>資料日期</th><th>狀態</th><th>規則版本</th><th>建立時間</th><th>Checksum</th><th>操作</th></tr></thead><tbody>{paging.visible.map((item) => <tr className={item.snapshot_id === backend.snapshot?.snapshot_id ? "activeRow" : ""}><td>{item.as_of_date}</td><td><span className={`statusTag ${item.status.toLowerCase()}`}>{item.status}</span></td><td>{item.rule_version}</td><td>{item.created_at}</td><td><code>{item.checksum?.slice(0,16)}…</code></td><td><button onClick={() => select(item.snapshot_id)}>載入快照</button></td></tr>)}</tbody></table><Pager total={backend.snapshots.length} paging={paging} label="個快照"/></div>:<EmptyModule image="./assets/empty-no-snapshot.png" title="尚未建立資料快照" text="請前往資料來源執行官方同步，完成後即可建立 PROVISIONAL 或 FINAL 快照。"/>}</section>;
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>資料快照</h1><p>FINAL 快照不可變更；PROVISIONAL 可供同步後驗證。</p></div></div>{backend.snapshots.length?<div className="moduleTable"><table><thead><tr><th>資料日期</th><th>狀態</th><th>規則版本</th><th>建立時間</th><th>Checksum</th><th>操作</th></tr></thead><tbody>{paging.visible.map((item) => <tr key={item.snapshot_id} className={item.snapshot_id === backend.snapshot?.snapshot_id ? "activeRow" : ""}><td>{item.as_of_date}</td><td><span className={`statusTag ${item.status.toLowerCase()}`}>{item.status}</span></td><td>{item.rule_version}</td><td>{item.created_at}</td><td><code>{item.checksum?.slice(0,16)}…</code></td><td><button onClick={() => select(item.snapshot_id)}>載入快照</button></td></tr>)}</tbody></table><Pager total={backend.snapshots.length} paging={paging} label="個快照"/></div>:<EmptyModule image="./assets/empty-no-snapshot.png" title="尚未建立資料快照" text="請前往資料來源執行官方同步，完成後即可建立 PROVISIONAL 或 FINAL 快照。"/>}</section>;
 }
 
 function Rules() {
