@@ -34,6 +34,20 @@ jobs:
           cp dist/rank-local-api desktop-next/backend/
       - run: npm ci
         working-directory: desktop-next
+      - name: Create approved macOS icon
+        run: |
+          mkdir -p desktop-next/build/icon.iconset
+          sips -z 16 16 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_16x16.png
+          sips -z 32 32 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_16x16@2x.png
+          sips -z 32 32 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_32x32.png
+          sips -z 64 64 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_32x32@2x.png
+          sips -z 128 128 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_128x128.png
+          sips -z 256 256 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_128x128@2x.png
+          sips -z 256 256 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_256x256.png
+          sips -z 512 512 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_256x256@2x.png
+          sips -z 512 512 desktop-next/build/icon.png --out desktop-next/build/icon.iconset/icon_512x512.png
+          cp desktop-next/build/icon.png desktop-next/build/icon.iconset/icon_512x512@2x.png
+          iconutil -c icns desktop-next/build/icon.iconset -o desktop-next/build/icon.icns
       - run: npm run dist:mac
         working-directory: desktop-next
         env: { CSC_IDENTITY_AUTO_DISCOVERY: "false" }

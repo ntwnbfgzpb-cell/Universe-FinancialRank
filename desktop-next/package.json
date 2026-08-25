@@ -42,6 +42,7 @@
       "output": "release"
     },
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
         {
           "target": "dmg",
@@ -53,6 +54,7 @@
       "category": "public.app-category.finance"
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "portable",

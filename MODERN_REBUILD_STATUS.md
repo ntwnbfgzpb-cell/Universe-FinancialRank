@@ -14,6 +14,7 @@
 - 本機 API 健康檢查與最新不可變快照偵測
 - Electron 封裝自動啟動 Python/SQLite 本機資料引擎
 - macOS Apple Silicon 與 Windows x64 未簽章建置工作流程
+- AI 生成「六柱排名＋星系軌道」正式程式圖示，含 PNG／ICO／ICNS 建置流程
 
 ## 驗證結果
 
