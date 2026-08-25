@@ -1,0 +1,14 @@
+{
+  "version": "xbrl-mapping-v1",
+  "concepts": {
+    "revenue": ["Revenue", "OperatingRevenue"],
+    "operating_income": ["OperatingIncomeLoss"],
+    "net_income_parent": ["ProfitLossAttributableToOwnersOfParent"],
+    "basic_eps": ["BasicEarningsLossPerShare"],
+    "inventory": ["Inventories"],
+    "cost_of_goods_sold": ["CostOfGoodsSold"],
+    "cfo": ["NetCashFlowsFromUsedInOperatingActivities"],
+    "capex_ppe": ["AcquisitionOfPropertyPlantAndEquipment"],
+    "capex_intangible": ["AcquisitionOfIntangibleAssets"]
+  }
+}
