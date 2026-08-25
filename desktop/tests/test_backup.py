@@ -7,6 +7,17 @@ from desktop.core.storage import LocalRepository
 
 
 class BackupTests(unittest.TestCase):
+    def test_rapid_backups_never_reuse_a_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "rank.db"
+            LocalRepository(source).close()
+            first, _ = create_backup(source, root / "backups")
+            second, _ = create_backup(source, root / "backups")
+            self.assertNotEqual(first.name, second.name)
+            self.assertTrue(first.exists())
+            self.assertTrue(second.exists())
+
     def test_backup_verify_and_restore(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

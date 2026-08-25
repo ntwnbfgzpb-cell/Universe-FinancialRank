@@ -4,12 +4,37 @@ import threading
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from desktop.local_api import ApiHandler
 
 
 class ApiTests(unittest.TestCase):
+    def test_backup_api_creates_lists_and_restores_verified_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ApiHandler.repository_path = str(Path(directory) / "rank.db")
+            ApiHandler.sync_state = {"status":"IDLE","progress":0,"message":"test","report":None}
+            server = ThreadingHTTPServer(("127.0.0.1", 0), ApiHandler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                base = f"http://127.0.0.1:{server.server_port}/api/v1/admin/backups"
+                request = Request(base, data=json.dumps({"action":"create"}).encode(),
+                                  headers={"Content-Type":"application/json"}, method="POST")
+                with urlopen(request) as response:
+                    created = json.load(response)
+                with urlopen(base) as response:
+                    backups = json.load(response)
+                self.assertEqual(backups[0]["backup_id"], created["backup_id"])
+                self.assertTrue(backups[0]["verified"])
+                restore = Request(base, data=json.dumps({"action":"restore", "backup_id":created["backup_id"],
+                                  "confirmation":"RESTORE"}).encode(), headers={"Content-Type":"application/json"}, method="POST")
+                with urlopen(restore) as response:
+                    restored = json.load(response)
+                self.assertIn("safety_backup_id", restored)
+            finally:
+                server.shutdown(); server.server_close(); thread.join(timeout=2)
+
     def test_health_endpoint_works_across_request_thread(self):
         with tempfile.TemporaryDirectory() as directory:
             ApiHandler.repository_path = str(Path(directory) / "rank.db")

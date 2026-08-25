@@ -13,9 +13,11 @@ from urllib.parse import parse_qs, urlparse
 try:
     from .core import LocalRepository
     from .auto_update import run_update
+    from .backup_restore import create_backup, restore_backup, verify_backup
 except ImportError:
     from core import LocalRepository
     from auto_update import run_update
+    from backup_restore import create_backup, restore_backup, verify_backup
 
 
 class ApiHandler(BaseHTTPRequestHandler):
@@ -62,6 +64,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             "/api/v1/lineage/{snapshot_id}/{symbol}/{metric_code}":"資料血緣",
             "/api/v1/export/rankings.csv":"排行榜 CSV", "/api/v1/admin/data-quality":"資料品質",
             "/api/v1/admin/sources":"來源與工作紀錄", "/api/v1/admin/sync":"官方資料同步"
+            , "/api/v1/admin/backups":"本機備份、驗證與還原"
         }.items()}
         return {"openapi":"3.0.3","info":{"title":"六大財務指標 Rank Local API","version":"0.7"},
                 "servers":[{"url":"http://127.0.0.1:8765"}],"paths":paths}
@@ -134,6 +137,19 @@ class ApiHandler(BaseHTTPRequestHandler):
                                    "jobs": [dict(row) for row in repository.ingestion_jobs()]})
             if parsed.path == "/api/v1/admin/sync":
                 return self._json(dict(self.sync_state))
+            if parsed.path == "/api/v1/admin/backups":
+                backup_directory = Path(self.repository_path).parent / "backups"
+                backups = []
+                for backup in sorted(backup_directory.glob("rank_local_*.db"), reverse=True)[:50]:
+                    try:
+                        manifest = verify_backup(backup)
+                        backups.append({"backup_id": backup.name, "created_at": manifest["created_at"],
+                                        "sha256": manifest["sha256"], "snapshots": len(manifest.get("snapshots", [])),
+                                        "size": backup.stat().st_size, "verified": True})
+                    except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+                        backups.append({"backup_id": backup.name, "verified": False, "error": str(error),
+                                        "size": backup.stat().st_size})
+                return self._json(backups)
             if parsed.path == "/api/v1/rules":
                 rules_file = Path(__file__).parent / "config" / "rules.v1.2.json"
                 return self._json(json.loads(rules_file.read_text(encoding="utf-8")))
@@ -176,13 +192,48 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/api/v1/admin/sync":
+        if parsed.path not in {"/api/v1/admin/sync", "/api/v1/admin/backups"}:
             return self._error("NOT_FOUND", "找不到指定端點", 404)
         length = int(self.headers.get("Content-Length", "0") or 0)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
             return self._error("INVALID_JSON", "同步參數不是有效 JSON")
+        if parsed.path == "/api/v1/admin/backups":
+            if self.sync_state["status"] == "RUNNING":
+                return self._error("SYNC_RUNNING", "資料同步期間不可備份或還原", 409)
+            action = body.get("action", "create")
+            database = Path(self.repository_path)
+            backup_directory = database.parent / "backups"
+            if action == "create":
+                try:
+                    if not database.exists():
+                        LocalRepository(database).close()
+                    backup, manifest_path = create_backup(database, backup_directory)
+                    manifest = verify_backup(backup, manifest_path)
+                    return self._json({"message":"備份與完整性驗證完成", "backup_id":backup.name,
+                                       "created_at":manifest["created_at"], "sha256":manifest["sha256"],
+                                       "snapshots":len(manifest.get("snapshots", []))}, 201)
+                except (OSError, ValueError) as error:
+                    return self._error("BACKUP_FAILED", str(error), 500)
+            if action == "restore":
+                backup_id = body.get("backup_id", "")
+                if body.get("confirmation") != "RESTORE":
+                    return self._error("RESTORE_CONFIRMATION_REQUIRED", "還原必須提供 confirmation=RESTORE")
+                if not backup_id or Path(backup_id).name != backup_id or not backup_id.startswith("rank_local_") or not backup_id.endswith(".db"):
+                    return self._error("INVALID_BACKUP_ID", "備份識別碼無效")
+                backup = backup_directory / backup_id
+                if not backup.exists():
+                    return self._error("BACKUP_NOT_FOUND", "找不到指定備份", 404)
+                try:
+                    safety_backup, _ = create_backup(database, backup_directory)
+                    restore_backup(backup, database, force=True)
+                    return self._json({"message":"資料庫已還原；請重新整理程式", "backup_id":backup_id,
+                                       "safety_backup_id":safety_backup.name})
+                except (OSError, ValueError) as error:
+                    return self._error("RESTORE_FAILED", str(error), 500)
+            return self._error("INVALID_BACKUP_ACTION", "action 僅能為 create 或 restore")
+
         publish_status = body.get("status", "PROVISIONAL")
         if publish_status not in {"PROVISIONAL", "FINAL"}:
             return self._error("INVALID_STATUS", "status 僅能為 PROVISIONAL 或 FINAL")

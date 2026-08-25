@@ -20,7 +20,7 @@ def sha256(path):
 def create_backup(database, output_directory):
     database, output = Path(database), Path(output_directory)
     output.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     backup = output / f"rank_local_{stamp}.db"
     source = sqlite3.connect(database)
     destination = sqlite3.connect(backup)

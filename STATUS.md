@@ -58,11 +58,14 @@
 | 條件模板 | VERIFIED | 本機儲存、載入、覆寫與刪除，不上傳外部服務 |
 | 篩選結果 CSV | VERIFIED | 匯出全部符合條件資料，UTF-8 BOM，包含模型與有效指標數 |
 | 排名洞察動態化 | VERIFIED | 產業與財務等級分布由目前快照即時計算，不再使用固定示意數字 |
+| 現代版備份與還原 UI | VERIFIED | 設定視窗可建立、列出、驗證並還原本機資料庫 |
+| 還原安全機制 | VERIFIED | backup_id 路徑限制、RESTORE 確認、同步期間阻擋及還原前安全備份 |
+| 備份唯一性 | VERIFIED | UTC 微秒檔名；連續備份不重名測試通過 |
 
 ## 驗證紀錄
 
 - JavaScript 語法檢查：通過。
 - 本機 HTTP 啟動：通過。
 - Playwright：套件可用，但執行環境缺少 Chromium binary，無法完成桌機／手機截圖及概念稿像素比對，因此視覺項目維持 DONE，尚未標 VERIFIED。
-- Python：39 項自動測試通過。
+- Python：41 項自動測試通過。
 - React/Vite production build：通過；所有新增分頁與品質頁籤均完成編譯驗證。

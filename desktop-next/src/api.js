@@ -20,6 +20,9 @@ export const endpoints = {
   sources: () => api("/admin/sources"),
   syncStatus: () => api("/admin/sync"),
   sync: (status = "PROVISIONAL") => api("/admin/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }),
+  backups: () => api("/admin/backups"),
+  createBackup: () => api("/admin/backups", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action:"create"}) }),
+  restoreBackup: (backupId) => api("/admin/backups", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action:"restore",backup_id:backupId,confirmation:"RESTORE"}) }),
 };
 
 export function rankingCsvUrl(snapshotId) {
