@@ -25,8 +25,16 @@ import {
   Clock3,
   CircleHelp,
   GitBranch,
+  Eye,
+  Trash2,
+  ExternalLink,
+  Play,
+  FileCheck2,
+  Wifi,
+  Gauge,
 } from "lucide-react";
 import { metrics, stocks, months, revenue, yoy } from "./data";
+import { endpoints, rankingCsvUrl } from "./api";
 import "./styles.css";
 
 const nav = [
@@ -44,51 +52,58 @@ const nav = [
   ["help", "使用教學", BookOpen],
 ];
 const gradeClass = (g) => "grade g-" + g.replace("/", "");
+const apiRowToDisplay = (row) => [
+  row.rank_model ?? "—", `${row.rank_industry ?? "—"} / —`, Number(row.model_percentile || 0).toFixed(1),
+  row.symbol, row.name, row.market, row.industry, Number(row.overall_score || 0).toFixed(1),
+  Number(row.overall_score || 0) >= 3.5 ? "AA" : Number(row.overall_score || 0) >= 3 ? "A" : Number(row.overall_score || 0) >= 2.5 ? "BB" : Number(row.overall_score || 0) >= 2 ? "B" : "C",
+  "—", "—", "—", "—", "—", "—", row.rank_status || "正常",
+];
 
 function App() {
   const [page, setPage] = useState("rank");
   const [selected, setSelected] = useState("2308");
-  const [backend, setBackend] = useState({ connected: false, snapshot: null });
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      fetch("http://127.0.0.1:8765/api/v1/health").then((response) => {
-        if (!response.ok) throw new Error("API unavailable");
-        return response.json();
-      }),
-      fetch("http://127.0.0.1:8765/api/v1/snapshots").then((response) =>
-        response.json(),
-      ),
-    ])
-      .then(([, snapshots]) => {
-        if (active)
-          setBackend({ connected: true, snapshot: snapshots?.[0] ?? null });
-      })
-      .catch(() => active && setBackend({ connected: false, snapshot: null }));
-    return () => {
-      active = false;
-    };
-  }, []);
+  const [backend, setBackend] = useState({ connected: false, snapshots: [], snapshot: null, rows: [], error: "" });
+  const [watchlist, setWatchlist] = useState(() => JSON.parse(localStorage.getItem("financial-rank-watchlist") || "[]"));
+  const load = async (snapshotId) => {
+    try {
+      const [, snapshots] = await Promise.all([endpoints.health(), endpoints.snapshots()]);
+      const snapshot = snapshots.find((item) => item.snapshot_id === snapshotId) || snapshots[0] || null;
+      const payload = snapshot ? await endpoints.rankings(snapshot.snapshot_id) : { items: [] };
+      setBackend({ connected: true, snapshots, snapshot, rows: payload.items || payload, error: "" });
+    } catch (error) {
+      setBackend({ connected: false, snapshots: [], snapshot: null, rows: [], error: error.message });
+    }
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => { localStorage.setItem("financial-rank-watchlist", JSON.stringify(watchlist)); }, [watchlist]);
+  const toggleWatch = (symbol) => setWatchlist((items) => items.includes(symbol) ? items.filter((item) => item !== symbol) : [...items, symbol]);
   return (
     <div className="appShell">
       <Sidebar page={page} setPage={setPage} />
       <div className="appMain">
-        <Topbar backend={backend} />
+        <Topbar backend={backend} onSnapshot={load} />
         <main>
+          {page === "dashboard" && <Dashboard backend={backend} setPage={setPage} />}
           {page === "rank" && (
             <Ranking
               selected={selected}
               setSelected={setSelected}
+              backend={backend}
+              watchlist={watchlist}
+              toggleWatch={toggleWatch}
               openStock={() => setPage("stock")}
             />
-          )}{" "}
-          {page === "stock" && <StockResearch />}
-          {page === "quality" && <Quality />}
-          {page === "galaxy" && <Galaxy />}
-          {page === "heat" && <Heatmap />}
-          {!["rank", "stock", "quality", "galaxy", "heat"].includes(page) && (
-            <Coming title={nav.find((x) => x[0] === page)?.[1]} />
           )}
+          {page === "watch" && <Watchlist items={watchlist} rows={backend.rows} remove={toggleWatch} open={(symbol) => { setSelected(symbol); setPage("stock"); }} />}
+          {page === "stock" && <StockResearch symbol={selected} snapshot={backend.snapshot} />}
+          {page === "industry" && <IndustryResearch rows={backend.rows} />}
+          {page === "quality" && <Quality connected={backend.connected} />}
+          {page === "galaxy" && <Galaxy rows={backend.rows} />}
+          {page === "heat" && <Heatmap rows={backend.rows} />}
+          {page === "snapshots" && <Snapshots backend={backend} select={load} />}
+          {page === "rules" && <Rules />}
+          {page === "sources" && <Sources refresh={() => load(backend.snapshot?.snapshot_id)} />}
+          {page === "help" && <Help />}
         </main>
       </div>
     </div>
@@ -130,15 +145,15 @@ function Sidebar({ page, setPage }) {
     </aside>
   );
 }
-function Topbar({ backend }) {
+function Topbar({ backend, onSnapshot }) {
   const snapshotText = backend.snapshot
     ? `${backend.snapshot.as_of_date} ${backend.snapshot.status}`
     : "2026-08-24 FINAL";
   return (
     <header className="topbar">
-      <button className="snapshot">
-        {snapshotText} <ChevronDown />
-      </button>
+      <select className="snapshot" value={backend.snapshot?.snapshot_id || ""} onChange={(event) => onSnapshot(event.target.value)}>
+        {backend.snapshots.length ? backend.snapshots.map((item) => <option key={item.snapshot_id} value={item.snapshot_id}>{item.as_of_date} {item.status} · {item.rule_version}</option>) : <option>{snapshotText}</option>}
+      </select>
       <div className="topMeta">
         資料日期：2026-08-24 <CircleHelp />
         <span className={backend.connected ? "synced" : "offline"}>
@@ -147,10 +162,10 @@ function Topbar({ backend }) {
             ? "本機資料引擎已連線"
             : "展示模式｜等待本機資料引擎"}
         </span>
-        <button>
+        <a className="topAction" href={rankingCsvUrl(backend.snapshot?.snapshot_id)} download>
           <Download />
           匯出資料
-        </button>
+        </a>
       </div>
     </header>
   );
@@ -164,17 +179,17 @@ const Select = ({ label, children }) => (
     </button>
   </label>
 );
-function Ranking({ selected, setSelected, openStock }) {
+function Ranking({ selected, setSelected, openStock, backend, watchlist, toggleWatch }) {
   const [q, setQ] = useState("");
   const [market, setMarket] = useState("全部");
   const rows = useMemo(
     () =>
-      stocks.filter(
+      (backend.rows.length ? backend.rows.map(apiRowToDisplay) : stocks).filter(
         (s) =>
           (market === "全部" || s[5] === market) &&
           (!q || s[3].includes(q) || s[4].includes(q)),
       ),
-    [q, market],
+    [q, market, backend.rows],
   );
   return (
     <section className="page rankPage">
@@ -277,8 +292,8 @@ function Ranking({ selected, setSelected, openStock }) {
                   onClick={() => setSelected(s[3])}
                   onDoubleClick={openStock}
                 >
-                  <td>
-                    <Star className={selected === s[3] ? "starred" : ""} />
+                  <td onClick={(event) => { event.stopPropagation(); toggleWatch(s[3]); }}>
+                    <Star className={watchlist.includes(s[3]) ? "starred" : ""} />
                   </td>
                   {s.map((v, i) => (
                     <td
@@ -296,7 +311,7 @@ function Ranking({ selected, setSelected, openStock }) {
             </tbody>
           </table>
           <div className="pagination">
-            <span>符合條件檔數：1,856 檔</span>
+            <span>符合條件檔數：{rows.length.toLocaleString()} 檔</span>
             <div>
               每頁顯示{" "}
               <button>
@@ -416,26 +431,39 @@ function Radar() {
     </svg>
   );
 }
-function StockResearch() {
+function StockResearch({ symbol, snapshot }) {
+  const [record, setRecord] = useState(null);
+  const [metricRows, setMetricRows] = useState([]);
+  useEffect(() => {
+    if (!symbol) return;
+    Promise.all([endpoints.stock(symbol, snapshot?.snapshot_id), endpoints.metrics(symbol, snapshot?.snapshot_id)])
+      .then(([stock, rows]) => { setRecord(stock); setMetricRows(rows); })
+      .catch(() => { setRecord(null); setMetricRows([]); });
+  }, [symbol, snapshot?.snapshot_id]);
+  const fallback = stocks.find((item) => item[3] === symbol) || stocks[0];
+  const stockName = record?.name || fallback[4];
+  const marketName = record?.market || fallback[5];
+  const industryName = record?.industry || fallback[6];
+  const overall = record?.overall_score || fallback[7];
   return (
     <section className="page stockPage">
       <div className="stockHero">
         <div>
-          <h1>2330 台積電</h1>
-          <span className="tag blue">上市</span>
-          <span className="tag gold">半導體</span>
-          <span className="tag">TW6F_GENERAL</span>
+          <h1>{symbol} {stockName}</h1>
+          <span className="tag blue">{marketName}</span>
+          <span className="tag gold">{industryName}</span>
+          <span className="tag">{record?.model_code || "TW6F_GENERAL"}</span>
         </div>
         <div className="stats">
           {[
-            ["綜合得分", "3.67 / 4"],
-            ["完整度", "6 / 6"],
-            ["模型排名", "12 / 923"],
-            ["市場排名", "18 / 923"],
-            ["產業排名", "3 / 47"],
-            ["模型百分位", "98.7%"],
-            ["資料快照", "FINAL"],
-            ["資料截止日", "2024/04/30"],
+            ["綜合得分", `${overall} / 4`],
+            ["完整度", `${record?.valid_count || 6} / 6`],
+            ["模型排名", `${record?.rank_model || fallback[0]} / —`],
+            ["市場排名", `${record?.rank_market || "—"} / —`],
+            ["產業排名", `${record?.rank_industry || "—"} / —`],
+            ["模型百分位", `${Number(record?.model_percentile || fallback[2]).toFixed(1)}%`],
+            ["資料快照", snapshot?.status || "展示"],
+            ["資料截止日", snapshot?.as_of_date || "2024/04/30"],
           ].map((x, i) => (
             <div>
               <small>{x[0]}</small>
@@ -450,7 +478,7 @@ function StockResearch() {
             <span>{i + 1}</span>
             <b>{m}</b>
             <strong>
-              {["AA", "AA", "A", "AA", "A", "AA"][i]}　{[4, 4, 3, 4, 3, 4][i]}
+              {metricRows[i]?.grade || ["AA", "AA", "A", "AA", "A", "AA"][i]}　{metricRows[i]?.score || [4, 4, 3, 4, 3, 4][i]}
             </strong>
           </div>
         ))}
@@ -610,6 +638,11 @@ function Lineage() {
   );
 }
 function Quality() {
+  const [syncMessage, setSyncMessage] = useState("");
+  const startSync = async () => {
+    try { const state = await endpoints.sync("PROVISIONAL"); setSyncMessage(state.message); }
+    catch (error) { setSyncMessage(error.message); }
+  };
   const issues = [
     [
       "重大",
@@ -672,10 +705,11 @@ function Quality() {
             2024Q1 FINAL v1
             <ChevronDown />
           </button>
-          <button className="sync">
+          <button className="sync" onClick={startSync}>
             <RefreshCw />
             同步官方資料
           </button>
+          {syncMessage && <small className="syncMessage">{syncMessage}</small>}
         </div>
       </div>
       <div className="qualityKpis">
@@ -987,6 +1021,60 @@ function Heatmap() {
       </div>
     </section>
   );
+}
+function Dashboard({ backend, setPage }) {
+  const rows = backend.rows.length ? backend.rows : stocks.map((item) => ({ symbol: item[3], name: item[4], industry: item[6], overall_score: item[7], model_percentile: item[2], rank_model: item[0] }));
+  const industries = new Set(rows.map((row) => row.industry)).size;
+  return <section className="page dashboardPage">
+    <div className="dashboardHero">
+      <div><h1>六大財務指標宇宙</h1><p>把營收、獲利、EPS、存貨與自由現金流整合成可追溯的全市場排名。</p><button className="heroButton" onClick={() => setPage("rank")}>查看完整排行榜 <ExternalLink /></button></div>
+      <div className="heroStatus"><span className={backend.connected ? "liveDot" : "warnDot"} />{backend.connected ? "官方快照資料已連線" : "展示模式｜啟動桌面資料引擎後自動串接"}</div>
+    </div>
+    <div className="summaryGrid">{[["可排名公司", rows.length, "檔"], ["產業群組", industries, "組"], ["最新快照", backend.snapshot?.status || "展示", ""], ["規則版本", backend.snapshot?.rule_version || "v1.2", ""]].map(([label, value, unit]) => <div><small>{label}</small><strong>{value}<em>{unit}</em></strong></div>)}</div>
+    <div className="dashboardGrid"><Panel title="排名領先公司"><table className="cleanTable"><tbody>{rows.slice(0, 7).map((row, index) => <tr><td><b>{index + 1}</b></td><td>{row.symbol}　{row.name}</td><td>{row.industry}</td><td>{Number(row.overall_score).toFixed(1)}</td></tr>)}</tbody></table></Panel><Panel title="模型百分位概況"><Bars values={rows.slice(0, 12).map((row) => Math.max(20, Number(row.model_percentile || 70)))} /></Panel></div>
+  </section>;
+}
+
+function Watchlist({ items, rows, remove, open }) {
+  const source = rows.length ? rows.map(apiRowToDisplay) : stocks;
+  const selectedRows = source.filter((row) => items.includes(row[3]));
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>選股清單</h1><p>收藏會保存在本機，不會上傳到外部服務。</p></div><span>{selectedRows.length} 檔</span></div>
+    {selectedRows.length ? <div className="moduleTable"><table><thead><tr><th>代號／名稱</th><th>市場</th><th>產業</th><th>模型排名</th><th>百分位</th><th>綜合分數</th><th>操作</th></tr></thead><tbody>{selectedRows.map((row) => <tr><td><b>{row[3]}</b>　{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td><td>{row[0]}</td><td>{row[2]}%</td><td>{row[7]}</td><td><button onClick={() => open(row[3])}><Eye />研究</button><button onClick={() => remove(row[3])}><Trash2 />移除</button></td></tr>)}</tbody></table></div> : <div className="emptyState"><img src="./assets/empty-watchlist-telescope.png"/><h2>尚未加入選股清單</h2><p>在排行榜點擊星號，即可建立自己的研究清單。</p></div>}
+  </section>;
+}
+
+function IndustryResearch({ rows }) {
+  const source = rows.length ? rows : stocks.map((item) => ({ industry: item[6], overall_score: item[7], model_percentile: item[2], symbol: item[3], name: item[4] }));
+  const groups = Object.values(source.reduce((acc, row) => { const key = row.industry || "未分類"; const group = acc[key] ||= { name: key, rows: [], total: 0 }; group.rows.push(row); group.total += Number(row.overall_score || 0); return acc; }, {})).map((group) => ({ ...group, average: group.total / group.rows.length })).sort((a,b) => b.average-a.average);
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>產業研究</h1><p>以同一不可變快照比較產業群組，避免跨期資料混用。</p></div></div><div className="industryGrid">{groups.map((group, index) => <article><span>{String(index+1).padStart(2,"0")}</span><h3>{group.name}</h3><strong>{group.average.toFixed(2)}</strong><small>平均綜合分數 · {group.rows.length} 檔</small><div className="industryBar"><i style={{width:`${Math.min(100, group.average/4*100)}%`}} /></div><p>領先：{group.rows.sort((a,b)=>Number(b.overall_score)-Number(a.overall_score)).slice(0,3).map((row)=>`${row.symbol} ${row.name}`).join("、")}</p></article>)}</div></section>;
+}
+
+function Snapshots({ backend, select }) {
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>資料快照</h1><p>FINAL 快照不可變更；PROVISIONAL 可供同步後驗證。</p></div></div><div className="moduleTable"><table><thead><tr><th>資料日期</th><th>狀態</th><th>規則版本</th><th>建立時間</th><th>Checksum</th><th>操作</th></tr></thead><tbody>{backend.snapshots.map((item) => <tr className={item.snapshot_id === backend.snapshot?.snapshot_id ? "activeRow" : ""}><td>{item.as_of_date}</td><td><span className={`statusTag ${item.status.toLowerCase()}`}>{item.status}</span></td><td>{item.rule_version}</td><td>{item.created_at}</td><td><code>{item.checksum?.slice(0,16)}…</code></td><td><button onClick={() => select(item.snapshot_id)}>載入快照</button></td></tr>)}</tbody></table></div></section>;
+}
+
+function Rules() {
+  const [rules, setRules] = useState(null);
+  useEffect(() => { endpoints.rules().then(setRules).catch(() => setRules({ version:"v1.2", metrics: [] })); }, []);
+  const entries = rules?.metrics || rules?.rules || [];
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>規則版本</h1><p>目前載入 {rules?.version || "讀取中"}；每筆排名均保存規則 checksum 與決策軌跡。</p></div><span className="verified"><FileCheck2 />啟動時驗證通過</span></div><div className="ruleCards">{metrics.map((name,index)=><article><span>0{index+1}</span><h3>{name}</h3><p>精確 Decimal 邊界判定、N/A 排除與同分 DENSE_RANK。</p><code>{entries[index]?.metric_code || ["REVENUE_GROWTH","OPERATING_MARGIN","NET_INCOME","EPS","INVENTORY_TURNOVER","FREE_CASH_FLOW"][index]}</code></article>)}</div></section>;
+}
+
+function Sources({ refresh }) {
+  const [state, setState] = useState({ documents: [], jobs: [] });
+  const [sync, setSync] = useState({ status: "IDLE", message: "" });
+  const loadSources = () => Promise.all([endpoints.sources(), endpoints.syncStatus()]).then(([sources, syncState]) => { setState(sources); setSync(syncState); }).catch(() => {});
+  useEffect(() => { loadSources(); }, []);
+  useEffect(() => { if (sync.status !== "RUNNING") return; const timer = setInterval(loadSources, 1800); return () => clearInterval(timer); }, [sync.status]);
+  const start = async () => { try { setSync(await endpoints.sync("PROVISIONAL")); } catch(error) { setSync({status:"FAILED",message:error.message}); } };
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>資料來源與自動更新</h1><p>只使用公開官方端點；原始檔、SHA-256、擷取時間與版本完整留存。</p></div><button className="sync" onClick={start} disabled={sync.status === "RUNNING"}><RefreshCw className={sync.status === "RUNNING" ? "spin" : ""}/>{sync.status === "RUNNING" ? "同步中" : "取得官方資料"}</button></div>
+  <div className="sourceStrip">{[["TWSE OpenAPI","證交所公司與月營收"],["TPEx OpenAPI","櫃買中心 Swagger 公開資料"],["MOPS / XBRL","財報公開檔與血緣"]].map(([name,desc])=><div><Wifi/><b>{name}</b><span>{desc}</span></div>)}</div>
+  <div className="syncPanel"><div><Gauge/><strong>{sync.status}</strong><span>{sync.message || "等待手動同步或每日排程"}</span></div><progress value={sync.progress || 0} max="100"/><button onClick={() => { loadSources(); refresh(); }}>重新整理畫面</button></div>
+  <div className="dashboardGrid"><Panel title="最近來源文件"><table className="cleanTable"><tbody>{state.documents.slice(0,8).map((doc)=><tr><td>{doc.provider}</td><td>{doc.source_key}</td><td>{doc.fetched_at}</td><td><code>{doc.sha256?.slice(0,8)}</code></td></tr>)}</tbody></table></Panel><Panel title="擷取工作紀錄"><table className="cleanTable"><tbody>{state.jobs.slice(0,8).map((job)=><tr><td>{job.provider}</td><td>{job.status}</td><td>{job.row_count} 筆</td><td>{job.started_at}</td></tr>)}</tbody></table></Panel></div></section>;
+}
+
+function Help() {
+  return <section className="page modulePage"><div className="pageTitle"><div><h1>使用教學</h1><p>從官方資料同步到個股決策追蹤的完整操作流程。</p></div></div><div className="helpFlow">{[["1","同步資料","前往資料來源，取得 TWSE／TPEx 公開資料並建立 PROVISIONAL 快照。"],["2","檢查品質","確認缺值、異常與來源新鮮度；FINAL 發布後不可變更。"],["3","篩選排名","依市場、產業、完整度、等級與綜合分數縮小範圍。"],["4","加入清單","點擊排行榜星號保存到本機選股清單。"],["5","研究個股","查看六指標、規則判定、原始期間值、歷史與資料血緣。"],["6","匯出留存","右上角匯出目前快照 CSV，便於複核或後續分析。"]].map(([n,title,text])=><article><b>{n}</b><div><h3>{title}</h3><p>{text}</p></div></article>)}</div><div className="helpNotice"><CircleHelp/><div><b>排名是研究工具，不是投資建議</b><p>星系關聯與熱力圖呈現相似性與分布，不代表因果關係或未來報酬。</p></div></div></section>;
 }
 function Coming({ title }) {
   return (

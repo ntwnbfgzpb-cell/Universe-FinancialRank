@@ -37,6 +37,10 @@
 | 跨批次歷史事實累積 | VERIFIED | 依 available_at cutoff 從 SQLite 累積重算 |
 | 完整 taxonomy 與 30 檔對帳 | BLOCKED | 需 Core FCF 現金流細項及可連官方站點／真實官方檔 |
 | 原生桌面視窗版 | DONE | desktop/desktop_app.py；待有圖形顯示環境完成視覺驗證 |
+| React/Electron 全功能頁 | VERIFIED | 已移除所有建置中頁；Vite production build 通過 |
+| 官方同步桌面串接 | VERIFIED | POST /api/v1/admin/sync 背景執行完整官方更新管線 |
+| 來源與擷取紀錄頁 | VERIFIED | source_documents、ingestion_jobs 與同步狀態 API 已串接 |
+| AI 總覽／空狀態素材 | VERIFIED | 2 組新素材已接入程式與素材清冊 |
 
 ## 驗證紀錄
 

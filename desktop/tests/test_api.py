@@ -37,10 +37,16 @@ class ApiTests(unittest.TestCase):
                     rules = json.load(response)
                 with urlopen(base + "/api/v1/admin/data-quality") as response:
                     quality = json.load(response)
+                with urlopen(base + "/api/v1/admin/sources") as response:
+                    sources = json.load(response)
+                with urlopen(base + "/api/v1/admin/sync") as response:
+                    sync = json.load(response)
                 with urlopen(base + "/api/v1/openapi.json") as response:
                     openapi = json.load(response)
                 self.assertEqual(rules["version"], "TW-RANK-SPEC-v1.2")
                 self.assertEqual(quality["summary"]["universe"], 0)
+                self.assertEqual(sources, {"documents": [], "jobs": []})
+                self.assertIn(sync["status"], {"IDLE", "SUCCESS", "FAILED"})
                 self.assertEqual(openapi["openapi"], "3.0.3")
             finally:
                 server.shutdown()

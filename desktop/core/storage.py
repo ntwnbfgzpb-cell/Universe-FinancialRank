@@ -281,6 +281,16 @@ class LocalRepository:
             "SELECT * FROM ranking_snapshots ORDER BY created_at DESC"
         ).fetchall()
 
+    def source_documents(self):
+        return self.connection.execute(
+            "SELECT * FROM source_documents ORDER BY fetched_at DESC LIMIT 200"
+        ).fetchall()
+
+    def ingestion_jobs(self):
+        return self.connection.execute(
+            "SELECT * FROM ingestion_jobs ORDER BY started_at DESC LIMIT 100"
+        ).fetchall()
+
     def snapshot(self, snapshot_id):
         return self.connection.execute(
             "SELECT * FROM ranking_snapshots WHERE snapshot_id=?", (snapshot_id,)

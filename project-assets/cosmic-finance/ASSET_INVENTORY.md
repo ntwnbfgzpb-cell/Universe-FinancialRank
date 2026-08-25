@@ -1,7 +1,7 @@
 # Cosmic Finance Asset Inventory
 
 設計比例：明亮金融工作台 85%＋宇宙資料視覺 15%  
-狀態：正式素材已生成並完成基本格式／透明度 QA；尚未接入程式。
+狀態：正式素材已生成、完成基本格式／透明度 QA，並已接入 React/Electron 程式。
 
 | 檔案 | 用途 | 尺寸 | 透明 | 使用規則 |
 |---|---|---:|---|---|
@@ -15,6 +15,8 @@
 | empty-lineage-incomplete.png | 資料血緣未齊 | 1603×981 | 是 | 不等同資料錯誤；顯示缺少階段 |
 | illustration-immutable-snapshot.png | 不可變快照說明 | 1254×1254 | 是 | 用於說明、快照歷史與治理頁 |
 | maintenance-data-source.png | 官方來源同步暫停／維護 | 1448×1086 | 是 | 搭配重試時間、來源名稱與工作狀態 |
+| bg-dashboard-cosmic-observatory.png | 總覽儀表板主視覺 | 1672×941 | 否 | 左側保留資訊留白；六節點與星系僅為指標整合意象 |
+| empty-watchlist-telescope.png | 選股清單空狀態 | 1254×1254 | 是 | 搭配程式原生的加入收藏操作說明 |
 
 ## 品質檢查
 

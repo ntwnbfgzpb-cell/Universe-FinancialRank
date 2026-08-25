@@ -4,18 +4,24 @@ import argparse
 import csv
 import io
 import json
+import threading
+from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 try:
     from .core import LocalRepository
+    from .auto_update import run_update
 except ImportError:
     from core import LocalRepository
+    from auto_update import run_update
 
 
 class ApiHandler(BaseHTTPRequestHandler):
     repository_path: str
+    sync_state = {"status": "IDLE", "progress": 0, "message": "尚未執行同步", "report": None}
+    sync_lock = threading.Lock()
 
     def _json(self, payload, status=200):
         data = json.dumps(payload, ensure_ascii=False, default=dict).encode("utf-8")
@@ -54,7 +60,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             "/api/v1/stocks/{symbol}/financials":"財務事實",
             "/api/v1/stocks/{symbol}/rank-history":"排名歷史", "/api/v1/rules":"規則版本",
             "/api/v1/lineage/{snapshot_id}/{symbol}/{metric_code}":"資料血緣",
-            "/api/v1/export/rankings.csv":"排行榜 CSV", "/api/v1/admin/data-quality":"資料品質"
+            "/api/v1/export/rankings.csv":"排行榜 CSV", "/api/v1/admin/data-quality":"資料品質",
+            "/api/v1/admin/sources":"來源與工作紀錄", "/api/v1/admin/sync":"官方資料同步"
         }.items()}
         return {"openapi":"3.0.3","info":{"title":"六大財務指標 Rank Local API","version":"0.7"},
                 "servers":[{"url":"http://127.0.0.1:8765"}],"paths":paths}
@@ -111,6 +118,11 @@ class ApiHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/v1/admin/data-quality":
                 return self._json({"summary": repository.quality_summary(),
                                    "issues": [dict(row) for row in repository.quality_issues()]})
+            if parsed.path == "/api/v1/admin/sources":
+                return self._json({"documents": [dict(row) for row in repository.source_documents()],
+                                   "jobs": [dict(row) for row in repository.ingestion_jobs()]})
+            if parsed.path == "/api/v1/admin/sync":
+                return self._json(dict(self.sync_state))
             if parsed.path == "/api/v1/rules":
                 rules_file = Path(__file__).parent / "config" / "rules.v1.2.json"
                 return self._json(json.loads(rules_file.read_text(encoding="utf-8")))
@@ -150,6 +162,40 @@ class ApiHandler(BaseHTTPRequestHandler):
             return self._error("NOT_FOUND", "找不到指定端點", 404)
         finally:
             repository.close()
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/api/v1/admin/sync":
+            return self._error("NOT_FOUND", "找不到指定端點", 404)
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except json.JSONDecodeError:
+            return self._error("INVALID_JSON", "同步參數不是有效 JSON")
+        publish_status = body.get("status", "PROVISIONAL")
+        if publish_status not in {"PROVISIONAL", "FINAL"}:
+            return self._error("INVALID_STATUS", "status 僅能為 PROVISIONAL 或 FINAL")
+        with self.sync_lock:
+            if self.sync_state["status"] == "RUNNING":
+                return self._error("SYNC_RUNNING", "官方資料同步已在執行", 409)
+            self.sync_state.update(status="RUNNING", progress=5, message="準備連線官方公開資料", report=None)
+
+        def worker():
+            try:
+                database = Path(self.repository_path)
+                self.sync_state.update(progress=15, message="下載 TWSE／TPEx 官方公開資料")
+                report = run_update(
+                    database,
+                    database.parent / "official_pipeline",
+                    date.today().isoformat(),
+                    publish_status,
+                )
+                self.sync_state.update(status="SUCCESS", progress=100, message="同步、正規化、評分與快照建立完成", report=report)
+            except Exception as error:
+                self.sync_state.update(status="FAILED", progress=0, message=str(error), report=None)
+
+        threading.Thread(target=worker, daemon=True).start()
+        return self._json(dict(self.sync_state), 202)
 
     def log_message(self, format, *args):
         return
