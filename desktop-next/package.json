@@ -13,17 +13,17 @@
     "dist:win": "npm run build && electron-builder --win portable --x64"
   },
   "dependencies": {
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
     "@vitejs/plugin-react": "latest",
     "electron": "latest",
     "electron-builder": "latest",
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "vite": "latest"
-  },
-  "devDependencies": {
     "playwright": "^1.62.1",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "vite": "latest"
   },
   "build": {
     "appId": "tw.billis.universefinancialrank",
