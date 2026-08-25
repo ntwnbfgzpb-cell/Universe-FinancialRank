@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.db
+*.p12
+*.pfx
+build/
+dist/
+desktop/build/
+desktop/dist/
+.DS_Store
+*.zip
+*.dmg
